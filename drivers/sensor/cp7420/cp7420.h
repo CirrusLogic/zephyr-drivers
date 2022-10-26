@@ -1,0 +1,355 @@
+/*
+ * Copyright(c) 2022 Cirrus Logic, Inc.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+#ifndef ZEPHYR_DRIVERS_SENSOR_CHARGER_CP7420_H_
+#define ZEPHYR_DRIVERS_SENSOR_CHARGER_CP7420_H_
+
+#include <zephyr/drivers/i2c.h>
+
+#define CP7420_IPRECHG_CFG_MASK		GENMASK(1, 0)
+#define CP7420_IPRECHG_MIN_MA		128
+#define CP7420_IPRECHG_MAX_MA		512
+#define CP7420_IPRECHG_OFFSET_MA	CP7420_IPRECHG_MIN_MA
+#define CP7420_IPRECHG_STEP_MA		128
+
+#define CP7420_IBAT_CHG_CFG_MASK	GENMASK(6, 0)
+#define CP7420_IBAT_CHG_MIN_MA		0
+#define CP7420_IBAT_CHG_MAX_MA		6000
+#define CP7420_IBAT_CHG_STEP_MA		50
+
+#define CP7420_VBAT_REG_LSB_MASK	GENMASK(7, 5)
+#define CP7420_VBAT_REG_MSB_MASK	GENMASK(6, 0)
+#define CP7420_VBAT_REG_SHIFT		5
+#define CP7420_VBAT_REG_MIN_MV		0
+#define CP7420_VBAT_REG_MAX_MV		10230
+#define CP7420_VBAT_REG_STEP_MV		10
+
+#define CP7420_VBAT_LOW_MASK		GENMASK(4, 2)
+#define CP7420_VBAT_LOW_SHIFT		2
+
+#define CP7420_VBAT_OV_CFG_SHIFT	6
+#define CP7420_VBAT_OV_CFG_MASK		GENMASK(7, CP7420_VBAT_OV_CFG_SHIFT)
+
+#define CP7420_RECHARGE_EN			BIT(5)
+
+#define CP7420_RECHARGE_OFFSET_SHIFT	2
+#define CP7420_RECHARGE_OFFSET_MASK		GENMASK(4, CP7420_RECHARGE_OFFSET_SHIFT)
+
+#define CP7420_RECAHRGE_DEGLITCH_MASK	GENMASK(1, 0)
+
+#define CP7420_VSYS_OV_CFG_SHIFT	6
+#define CP7420_ITERM_EN				BIT(4)
+#define CP7420_ITERM_CFG_MIN_MA		100
+#define CP7420_ITERM_CFG_MAX_MA		1600
+#define CP7420_ITERM_CFG_STEP_MA	100
+#define CP7420_ITERM_CFG_OFFSET_MA	CP7420_ITERM_CFG_MIN_MA
+
+#define CP7420_AUTO_CHG_TIMER_EN		BIT(6)
+#define CP7420_PRECHG_TIMER_SHIFT		3
+#define CP7420_PRECHG_TIMER_MASK		GENMASK(5, CP7420_PRECHG_TIMER_SHIFT)
+#define CP7420_FAST_CHG_TIMER_MASK		GENMASK(2, 0)
+
+#define CP7420_VIN_REG_MIN_MV		3300
+#define CP7420_VIN_REG_MAX_MV		21000
+#define CP7420_VIN_REG_STEP_MV		100
+#define CP7420_VIN_REG_OFFSET_MV	CP7420_VIN_REG_MIN_MV
+
+#define CP7420_IIN_REG_MIN_MA		0
+#define CP7420_IIN_REG_MAX_MA		10000
+#define CP7420_IIN_REG_STEP_MA		50
+
+#define CP7420_IIN_LIMIT_1_MIN_MA	0
+#define CP7420_IIN_LIMIT_1_MAX_MA	6000
+#define CP7420_IIN_LIMIT_1_STEP_MA	50
+
+#define CP7420_IIN_LIMIT_2_MIN_MA	0
+#define CP7420_IIN_LIMIT_2_MAX_MA	10000
+#define CP7420_IIN_LIMIT_2_STEP_MA	50
+
+#define CP7420_IIN_LIMIT_PEAK_MIN_MA	0
+#define CP7420_IIN_LIMIT_PEAK_MAX_MA	10000
+#define CP7420_IIN_LIMIT_PEAK_STEP_MA	50
+
+#define CP7420_VIN_LOW_MIN_MV		3800
+#define CP7420_VIN_LOW_MAX_MV		21000
+#define CP7420_VIN_LOW_STEP_MV		100
+#define CP7420_VIN_LOW_OFFSET_MV	CP7420_VIN_LOW_MIN_MV
+
+#define CP7420_VSYS_MIN_MIN_MV			0
+#define CP7420_VSYS_MIN_MAX_MV			10000
+#define CP7420_VSYS_MIN_STEP_MV			50
+
+#define CP7420_VSYS_MAX_MIN_MV			0
+#define CP7420_VSYS_MAX_MAX_MV			10000
+#define CP7420_VSYS_MAX_STEP_MV			50
+
+#define CP7420_VSYS_LOW_MIN_MV			2500
+#define CP7420_VSYS_LOW_MAX_MV			9000
+#define CP7420_VSYS_LOW_STEP_MV			100
+#define CP7420_VSYS_LOW_OFFSET_MV		CP7420_VSYS_LOW_MIN_MV
+
+#define CP7420_NTC_EN					BIT(7)
+#define CP7420_TSDIE_EN					BIT(6)
+#define CP7420_BATGONE_EN				BIT(5)
+#define CP7420_WATCHDOG_TIMER_MASK		GENMASK(2, 0)
+
+#define CP7420_VIN_DPM_THRESH_MASK		GENMASK(7, 4)
+#define CP7420_VIN_DPM_THRESH_SHIFT		4
+#define CP7420_FSW_CFG_MASK				GENMASK(3, 0)
+
+#define CP7420_IBAT_SOFTSTART_SHIFT		6
+#define CP7420_IBAT_SOFTSTART_MASK		GENMASK(7, 6)
+#define CP7420_RECHG_IBAT_SOFTSTART		BIT(5)
+#define CP7420_VSYS_SOFTSTART_SHIFT		3
+#define CP7420_VSYS_SOFTSTART_MASK		GENMASK(4, 3)
+
+#define CP7420_IBAT_DISCHG_LIM_1_MIN_MA		0
+#define CP7420_IBAT_DISCHG_LIM_1_MAX_MA		20000
+#define CP7420_IBAT_DISCHG_LIM_1_STEP_MA	100
+
+#define CP7420_IBAT_DISCHG_LIM_2_MIN_MA		0
+#define CP7420_IBAT_DISCHG_LIM_2_MAX_MA		40000
+#define CP7420_IBAT_DISCHG_LIM_2_STEP_MA	200
+
+#define CP7420_T_IIN_MAX1_SHIFT				2
+#define CP7420_T_IIN_MAX1_MASK				GENMASK(3, CP7420_T_IIN_MAX1_SHIFT)
+
+#define CP7420_T_IIN_MAX2_MASK				GENMASK(1, 0)
+
+#define CP7420_T_IBAT_MAX1_SHIFT			6
+#define CP7420_T_IBAT_MAX1_MASK				GENMASK(7, CP7420_T_IBAT_MAX1_SHIFT)
+
+#define CP7420_T_IBAT_MAX2_SHIFT			4
+#define CP7420_T_IBAT_MAX2_MASK				GENMASK(5, CP7420_T_IBAT_MAX2_SHIFT)
+
+#define CP7420_T_IBAT_MASK					(CP7420_T_IBAT_MAX1_MASK | \
+											 CP7420_T_IBAT_MAX2_MASK)
+
+#define CP7420_PROCHOT_DUR_SHIFT			4
+#define CP7420_PROCHOT_DUR_MASK				GENMASK(7, CP7420_PROCHOT_DUR_SHIFT)
+
+#define CP7420_PROCHOT_DEBOUNCE_SHIFT		2
+#define CP7420_PROCHOT_DEBOUNCE_MASK		GENMASK(3, CP7420_PROCHOT_DEBOUNCE_SHIFT)
+
+#define CP7420_PROCHOT_MON_SHIFT			5
+
+#define CP7420_DITHER_EN					BIT(7)
+#define CP7420_DITHER_RATE_SHIFT			4
+#define CP7420_DITHER_RATE_MASK				GENMASK(6, CP7420_DITHER_RATE_SHIFT)
+#define CP7420_DITHER_LIMIT_MASK			GENMASK(3, 0)
+
+#define CP7420_PSYS_EN						BIT(7)
+#define CP7420_RSI_CFG_SHIFT				5
+#define CP7420_RSI_CFG_MASK					GENMASK(6, CP7420_RSI_CFG_SHIFT)
+#define CP7420_RSO_CFG_SHIFT				3
+#define CP7420_RSO_CFG_MASK					GENMASK(4, CP7420_RSO_CFG_SHIFT)
+#define CP7420_PSYS_RATIO_SHIFT				1
+#define CP7420_PSYS_RATIO_MASK				GENMASK(2, CP7420_PSYS_RATIO_SHIFT)
+
+#define CP7420_OCP_PWM_CFG_MASK				GENMASK(4, 0)
+#define CP7420_OCP_PWM_MIN_MA				3800
+#define CP7420_OCP_PWM_MAX_MA				6800
+#define CP7420_OCP_PWM_OFFSET_MA			CP7420_OCP_PWM_MIN_MA
+#define CP7420_OCP_PWM_STEP_MA				100
+
+#define CP7420_OCP_PFM_CFG_MASK				GENMASK(4, 0)
+#define CP7420_OCP_PFM_MIN_MA				1300
+#define CP7420_OCP_PFM_MAX_MA				4000
+#define CP7420_OCP_PFM_OFFSET_MA			CP7420_OCP_PFM_MIN_MA
+#define CP7420_OCP_PFM_STEP_MA				100
+
+#define CP7420_VIN_REG_EN					BIT(7)
+#define CP7420_IIN_REG_EN					BIT(6)
+#define CP7420_LPM_EN						BIT(2)
+#define CP7420_CHG_MODE_MASK				GENMASK(2, 0)
+
+#define CP7420_ADC_EN						BIT(7)
+#define CP7420_PAUSE_ADC_UPDATES			BIT(5)
+#define CP7420_PAUSE_INT_UPDATES			BIT(6)
+#define CP7420_PAUSE_UPDATES				(CP7420_PAUSE_ADC_UPDATES | \
+											 CP7420_PAUSE_INT_UPDATES)
+
+#define CP7420_ADC_NTC_STEP_UV				122
+#define CP7420_ADC_VBAT_STEP_UV				3000
+#define CP7420_ADC_TDIE_STEP_UC				45200
+#define CP7420_ADC_IIN_STEP_UA				2500
+#define CP7420_ADC_IBAT_STEP_UA				10000
+#define CP7420_ADC_IBAT_MASK				GENMASK(11, 0)
+#define CP7420_ADC_IBAT_DISCHG				BIT(15)
+#define CP7420_ADC_VSYS_STEP_UV				3000
+#define CP7420_ADC_VIN_STEP_UV				6000
+
+/* Register addresses */
+enum {
+	POWER_STATUS = 0x6,
+	CHARGE_STATUS = 0x7,
+	REGULATION_STATUS = 0x8,
+	TEMP_TIMER_STATUS = 0x9,
+	PROTECTION_STATUS_0 = 0xa,
+	PROTECTION_STATUS_1 = 0xb,
+	ADC_NTC_STATUS = 0xc,
+	ADC_VBAT_STATUS = 0xe,
+	ADC_TDIE_STATUS = 0x10,
+	ADC_IIN_STATUS = 0x12,
+	ADC_IBAT_STATUS = 0x14,
+	ADC_VSYS_STATUS = 0x16,
+	ADC_VIN_STATUS = 0x18,
+	DEVICE_CONFIGURATION = 0x25,
+	OPERATION_CTRL_0 = 0x26,
+	PROTECTION_CTRL = 0x28,
+	BATTERY_CHGING_CTRL_0 = 0x29,
+	BATTERY_CHGING_CTRL_1,
+	BATTERY_CHGING_CTRL_2,
+	BATTERY_CHGING_CTRL_3,
+	BATTERY_CHGING_CTRL_4,
+	BATTERY_CHGING_CTRL_5,
+	INPUT_CTRL_0 = 0x2f,
+	INPUT_CTRL_1,
+	INPUT_CTRL_2,
+	INPUT_CTRL_3,
+	INPUT_CTRL_4,
+	INPUT_CTRL_5,
+	SYS_VOLTAGE_CTRL_0 = 0x35,
+	SYS_VOLTAGE_CTRL_1,
+	SYS_VOLTAGE_CTRL_2,
+	TEMP_REGULATION_CTRL = 0x38,
+	DPM_CTRL = 0x39,
+	STARTUP_CTRL = 0x3a,
+	BATTERY_DISCHG_CTRL_0 = 0x3b,
+	BATTERY_DISCHG_CTRL_1,
+	TWO_LEVEL_CURRENT_CTRL = 0x3d,
+	PROCHOT_CTRL_0 = 0x3e,
+	PROCHOT_CTRL_1,
+	PROCHOT_CTRL_2,
+	DITHERING_CTRL = 0x41,
+	ADC_CTRL_0 = 0x42,
+	ADC_CTRL_1 = 0x43,
+	POWER_MONITOR_CTRL = 0x44,
+	SWITCH_CURRENT_CTRL_1 = 0x45,
+	SWITCH_CURRENT_CTRL_2,
+};
+
+/* CP7420 specific attributes */
+enum cp7420_attributes {
+	CP7420_ATTR_PROCHOT_DURATION = SENSOR_ATTR_PRIV_START,
+	CP7420_ATTR_PROCHOT_DEBOUNCE,
+};
+
+/* CP7420 specific channels */
+enum cp7420_channels {
+	CP7420_CHAN_IIN_LIMIT_1 = SENSOR_CHAN_PRIV_START,
+	CP7420_CHAN_IIN_LIMIT_2,
+	CP7420_CHAN_IIN_LIMIT_PEAK,
+	CP7420_CHAN_VIN_LOW,
+	CP7420_CHAN_IBAT_DISCHARGE_LIMIT_1,
+	CP7420_CHAN_IBAT_DISCHARGE_LIMIT_2,
+	CP7420_CHAN_VSYSMIN,
+	CP7420_CHAN_LOW_POWER_MODE,
+	CP7420_CHAN_PROCHOT_ALL,
+};
+
+/* CP7420 ADC channels */
+enum cp7420_adc {
+	CP7420_ADC_NTC,
+	CP7420_ADC_VBAT,
+	CP7420_ADC_TDIE,
+	CP7420_ADC_IIN,
+	CP7420_ADC_IBAT_CHG,
+	CP7420_ADC_VSYS,
+	CP7420_ADC_VIN,
+	CP7420_ADC_PROG,
+	CP7420_ADC_ADDR,
+	CP7420_ADC_COUNT,
+};
+
+struct cp7420_data {
+	uint16_t vin_reg_mv;
+	uint16_t iin_reg_ma;
+	uint16_t vbat_reg_mv;
+	uint16_t iin_limit_1_ma;
+	uint16_t iin_limit_2_ma;
+	uint16_t iin_limit_peak_ma;
+	uint16_t vin_low_mv;
+	uint16_t vsys_low_mv;
+	uint16_t iprechg_ma;
+	uint16_t ibat_chg_ma;
+	uint16_t ibat_dischg_limit_1_ma;
+	uint16_t ibat_dischg_limit_2_ma;
+	uint16_t vsys_min_mv;
+	uint16_t prochot_mon;
+	uint8_t prochot_debounce;
+	uint8_t t_ibat_max_1;
+	uint8_t t_ibat_max_2;
+	uint8_t t_iin_max_1;
+	uint8_t t_iin_max_2;
+	uint8_t prochot_duration;
+	bool vin_reg_en;
+	bool iin_reg_en;
+	bool recharge_en;
+	bool lpm_en;
+	bool chg_mode;
+	bool psys_en;
+};
+
+struct cp7420_config {
+	struct i2c_dt_spec i2c;
+	uint16_t i2c_addr;
+	uint16_t ibat_chg_max_ma;
+	uint16_t vbat_reg_max_mv;
+	uint16_t vsys_max_mv;
+	uint16_t vsys_min_mv;
+
+	bool vin_ovp_en;
+	bool vsys_ovp_en;
+	bool vbat_ovp_en;
+	bool sw_ocp_en;
+	uint8_t vin_ov_cfg;
+
+	uint8_t vbat_low;
+	uint16_t iprechg_ma;
+
+	uint8_t vbat_ov_cfg;
+	bool recharge_en;
+	uint8_t recharge_offset;
+	uint8_t recharge_deglitch;
+
+	uint8_t vsys_ov_cfg;
+	bool iterm_en;
+	uint16_t iterm_ma;
+
+	bool auto_chg_timer_en;
+	uint8_t prechg_timer;
+	uint8_t fast_chg_timer;
+
+	bool ntc_en;
+	bool tsdie_en;
+	bool batgone_en;
+	uint8_t watchdog_timer;
+
+	uint8_t vin_dpm_threshold;
+	uint8_t fsw_cfg;
+
+	uint8_t ibat_softstart;
+	bool rechg_ibat_softstart;
+	uint8_t vsys_softstart;
+
+	bool dither_en;
+	uint8_t dither_rate;
+	uint8_t dither_limit;
+
+	bool psys_en;
+	uint8_t rsi_cfg;
+	uint8_t rso_cfg;
+	uint8_t psys_ratio;
+
+	uint8_t ocp_pwm_cfg;
+	uint8_t ocp_pfm_cfg;
+
+	uint8_t t_ibat_max1;
+	uint8_t t_ibat_max2;
+};
+
+#endif
