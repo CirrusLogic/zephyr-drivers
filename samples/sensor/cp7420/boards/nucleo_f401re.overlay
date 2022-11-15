@@ -1,0 +1,45 @@
+/*
+  * Copyright (c) 2022 Cirrus Logic Inc.
+  *
+  * SPDX-License-Identifier: Apache-2.0
+  */
+
+&arduino_i2c {
+	status = "okay";
+
+   cp7420@58 {
+       compatible = "cirrus,cp7420";
+       status = "okay";
+       label = "CP7420";
+       reg = <0x58>;
+       charge-current-milliamps = <3000>;
+       charge-voltage-millivolts = <8400>;
+       maximum-system-millivolts = <9000>;
+       minimum-system-millivolts = <8000>;
+       input-ovp-config = <0x1>;
+       low-battery-threshold = <0x1>;
+       precharge-current-milliamps = <256>;
+       battery-ovp-config = <0x1>;
+       recharge-offset = <0x1>;
+       recharge-deglitch = <0x1>;
+       system-ovp-config = <0x1>;
+       termination-current-milliamps = <0x1>;
+       precharge-timer-config = <0x1>;
+       fast-charge-timer-config = <0x1>;
+       watchdog-timer-config = <0x1>;
+       input-voltage-dpm-config = <0x1>;
+       switching-frequency-config = <0x1>;
+       ibat-softstart-config = <0x1>;
+       rechg-ibat-softstart = <0x1>;
+       system-softstart = <0x1>;
+       dither-rate-config = <0x1>;
+       dither-limit-config = <0x1>;
+       input-sense-resistor-config = <0x1>;
+       output-sense-resistor-config = <0x1>;
+       psys-output-ratio-config = <0x1>;
+       ocp-pwm-config = <0x1>;
+       ocp-pfm-config = <0x1>;
+       prochot-discharge-lower-limit = <0x1>;
+       prochot-discharge-upper-limit = <0x1>;
+   };
+};

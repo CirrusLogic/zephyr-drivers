@@ -1,0 +1,11 @@
+sample:
+  description: Demonstration of the CP7420 charging IC driver
+  name: CP7420 Sample
+tests:
+  sample.sensor.cp7420:
+    harness: sensor
+    platform_allow: nucleo_f401re
+    integration_platforms:
+      - nucleo_f401re
+    tags: sensors
+    depends_on: i2c
