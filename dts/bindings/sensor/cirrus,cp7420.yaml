@@ -1,0 +1,209 @@
+#
+# Copyright (c) 2022 Cirrus Logic, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+description: Cirrus Logic CP7420 Battery Charger
+
+compatible: "cirrus,cp7420"
+
+include: i2c-device.yaml
+
+properties:
+    charge-current-milliamps:
+      type: int
+      required: true
+      description: Battery charge current in mA
+
+    charge-voltage-millivolts:
+      type: int
+      required: true
+      description: Battery charge voltage in mV
+
+    maximum-system-millivolts:
+      type: int
+      required: true
+      description: Maximum system voltage in mV
+
+    minimum-system-millivolts:
+      type: int
+      required: true
+      description: Minimum system voltage in mV
+
+    enable-input-ovp:
+      type: boolean
+      description: Enable input overvoltage protection
+
+    enable-system-ovp:
+      type: boolean
+      description: Enable system overvoltage protection
+
+    enable-battery-ovp:
+      type: boolean
+      description: Enable battery overvoltage protection
+
+    enable-switching-ocp:
+      type: boolean
+      description: Enable switching overcurrent protection
+
+    input-ovp-config:
+      type: int
+      required: true
+      description: Configuration code for the input overvoltage protection
+
+    low-battery-threshold:
+      type: int
+      required: true
+      description: Configuration code for precharge to fast charge transition
+
+    precharge-current-milliamps:
+      type: int
+      required: true
+      description: Precharge current in mA
+
+    battery-ovp-config:
+      type: int
+      required: true
+      description: Configuration code for the battery overvoltage protection
+
+    enable-recharge:
+      type: boolean
+      description: Enable battery recharging
+
+    recharge-offset:
+      type: int
+      required: true
+      description: Configuration code for the recharge offset
+
+    recharge-deglitch:
+      type: int
+      required: true
+      description: Configuration code for the recharge deglitch
+
+    system-ovp-config:
+      type: int
+      required: true
+      description: Configuration code for the system overvoltage protection
+
+    enable-charge-termination:
+      type: boolean
+      description: Enable charging termination
+
+    termination-current-milliamps:
+      type: int
+      required: true
+      description: Charge termination threshold in milliamps
+
+    enable-auto-charge-timer:
+      type: boolean
+      description: Enable charging termination
+
+    precharge-timer-config:
+      type: int
+      required: true
+      description: Configuration code for the precharge timer
+
+    fast-charge-timer-config:
+      type: int
+      required: true
+      description: Configuration code for the fast charge timer
+
+    enable-ntc-feedback:
+      type: boolean
+      description: Enable thermistor feedback
+
+    enable-tsdie-protection:
+      type: boolean
+      description: Enable TSDIE protection
+
+    enable-batgone-detection:
+      type: boolean
+      description: Enable BATGONE detection
+
+    enable-ntc-feedback:
+      type: boolean
+      description: Enable thermistor feedback
+
+    watchdog-timer-config:
+      type: int
+      required: true
+      description: Configuration code for the watchdog timer
+
+    input-voltage-dpm-config:
+      type: int
+      required: true
+      description: Configuration code for the watchdog timer
+
+    switching-frequency-config:
+      type: int
+      required: true
+      description: Configuration code for the switching frequency
+
+    ibat-softstart-config:
+      type: int
+      required: true
+      description: Configuration code for IBAT softstart
+
+    rechg-ibat-softstart:
+      type: int
+      required: true
+      description: Configuration code for recharge IBAT softstart
+
+    system-softstart:
+      type: int
+      required: true
+      description: Configuration code for system softstart
+
+    enable-dithering:
+      type: boolean
+      description: Enable converter dithering
+
+    dither-rate-config:
+      type: int
+      required: true
+      description: Configuration code for dithering rate
+
+    dither-limit-config:
+      type: int
+      required: true
+      description: Configuration code for dithering limit
+
+    psys-output-desired:
+      type: boolean
+      description: PSYS analog output is desired
+
+    input-sense-resistor-config:
+      type: int
+      required: true
+      description: Configuration code for the input sense resistor
+
+    output-sense-resistor-config:
+      type: int
+      required: true
+      description: Configuration code for the output sense resistor
+
+    psys-output-ratio-config:
+      type: int
+      required: true
+      description: Configuration code for the PSYS gain
+
+    ocp-pwm-config:
+      type: int
+      required: true
+      description: Configuration code for the overcurrent protection in PWM mode
+
+    ocp-pfm-config:
+      type: int
+      required: true
+      description: Configuration code for the overcurrent protection in PFM mode
+
+    prochot-discharge-lower-limit:
+      type: int
+      required: true
+      description: Configuration code for the lower PROCHOT  discharge limit
+
+    prochot-discharge-upper-limit:
+      type: int
+      required: true
+      description: Configuration code for the upper PROCHOT  discharge limit

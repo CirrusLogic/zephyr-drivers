@@ -1,0 +1,10 @@
+# Copyright (c) 2022 Cirrus Logic Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig CP7420
+	bool "CP7420 Battery Charger"
+	default y
+	depends on I2C
+	help
+	  Enable I2C-based driver for CP7420 Battery Charger.
