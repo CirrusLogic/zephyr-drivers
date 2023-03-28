@@ -1,0 +1,12 @@
+#
+# Copyright 2023 Cirrus Logic, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+#
+
+include: base.yaml
+
+description: |
+   Battery charger parameters and info
+
+compatible: "charger.yaml"
