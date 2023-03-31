@@ -1,0 +1,5 @@
+description: SBS 1.1 compliant charger (http://www.sbs-forum.org/specs)
+
+compatible: "sbs,sbs-charger"
+
+include: [i2c-device.yaml, charger.yaml]

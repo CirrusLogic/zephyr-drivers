@@ -1,0 +1,18 @@
+# Copyright 2023 Cirrus Logic, Inc.
+#
+# SPDX-License-Identifier: Apache-2.0
+
+menuconfig CHARGER
+	bool "Battery charger drivers"
+	help
+	  Enable battery charger driver configuration.
+
+if CHARGER
+
+module = CHARGER
+module-str = charger
+source "subsys/logging/Kconfig.template.log_config"
+
+source "drivers/charger/sbs_charger/Kconfig"
+
+endif # CHARGER

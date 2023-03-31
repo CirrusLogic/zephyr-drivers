@@ -11,6 +11,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#include <errno.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -88,6 +89,22 @@ struct charger_get_property {
 };
 
 /**
+ * @typedef charger_get_property_t
+ * @brief Callback API for getting a charger property.
+ *
+ * See charger_get_property() for argument description
+ */
+typedef int (*charger_get_property_t)(const struct device *dev,
+									  struct charger_get_property *props,
+									  size_t props_len);
+
+/* Caching is entirely on the onus of the client */
+
+__subsystem struct charger_driver_api {
+	charger_get_property_t get_property;
+};
+
+/**
  * @brief Fetch a battery charger property
  *
  * @param dev Pointer to the battery charger device
@@ -99,17 +116,26 @@ struct charger_get_property {
  * @return return=0 if successful, return < 0 if getting all properties failed, return > 0 if some
  * properties failed where return=number of failing properties.
  */
-typedef int (*charger_get_property_t)(const struct device *dev,
-					 struct charger_get_property *props, size_t props_len);
+__syscall int charger_get_prop(const struct device *dev, struct charger_get_property *props,
+				  size_t props_len);
 
-/* Caching is entirely on the onus of the client */
+static inline int z_impl_charger_get_prop(const struct device *dev,
+					     struct charger_get_property *props,
+					     size_t props_len)
+{
+	const struct charger_driver_api *api = (const struct charger_driver_api *)dev->api;
 
-__subsystem struct charger_driver_api {
-	charger_get_property_t get_property;
-};
+	if (api->get_property == NULL) {
+		return -ENOSYS;
+	}
+
+	return api->get_property(dev, props, props_len);
+}
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+#include <syscalls/charger.h>
 
 #endif /* ZEPHYR_INCLUDE_DRIVERS_CHARGER_H_ */

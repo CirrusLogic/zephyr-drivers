@@ -1,0 +1,6 @@
+zephyr_library()
+
+zephyr_library_sources(sbs_charger.c)
+
+zephyr_include_directories_ifdef(CONFIG_EMUL_SBS_CHARGER .)
+zephyr_library_sources_ifdef(CONFIG_EMUL_SBS_CHARGER emul_sbs_charger.c)
