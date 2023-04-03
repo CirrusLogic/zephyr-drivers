@@ -7,6 +7,13 @@
 #ifndef ZEPHYR_INCLUDE_DRIVERS_CHARGER_H_
 #define ZEPHYR_INCLUDE_DRIVERS_CHARGER_H_
 
+/**
+ * @brief Charger Interface
+ * @defgroup charger_interface Charger Interface
+ * @ingroup io_interfaces
+ * @{
+ */
+
 #ifdef __cplusplus
 extern "C" {
 #endif /* __cplusplus */
@@ -131,6 +138,10 @@ static inline int z_impl_charger_get_prop(const struct device *dev,
 
 	return api->get_property(dev, props, props_len);
 }
+
+/**
+ * @}
+ */
 
 #ifdef __cplusplus
 }

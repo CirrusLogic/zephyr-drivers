@@ -9,6 +9,7 @@ Peripherals
    adc.rst
    audio/index.rst
    canbus/index.rst
+   charger.rst
    coredump.rst
    counter.rst
    clock_control.rst
