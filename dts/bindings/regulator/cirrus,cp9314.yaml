@@ -1,0 +1,30 @@
+# Copyright (c) 2023 Cirrus Logic, Inc.
+# SPDX -License-Identifier: Apache-2.0
+
+description: Cirrus CP9314 Buck Switched Cap DC/DC Converter
+
+compatible: "cirrus,cp9314"
+
+include:
+  - name: i2c-device.yaml
+  - name: regulator.yaml
+    property-allowlist:
+      - regulator-allowed-modes
+      - regulator-initial-mode
+
+properties:
+  reg:
+    required: true
+  cirrus,en-gpios:
+    type: phandle-array
+    description: GPIO tied to EN pin
+  cirrus,sync-role:
+    type: string
+    description: Assign a role for synchronous multi-chip operation to a chip instance.
+    default: "standalone"
+    enum:
+      - "host"
+      - "device-2"
+      - "device-3"
+      - "device-4"
+      - "standalone"
