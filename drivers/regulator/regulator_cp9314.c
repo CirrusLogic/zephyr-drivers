@@ -288,6 +288,36 @@ static int cp9314_do_soft_reset(const struct device *dev)
 	return 0;
 }
 
+static int regulator_cp9314_cfg_en(const struct device *dev)
+{
+	const struct regulator_cp9314_config *config = dev->config;
+	uint8_t value = CP9314_KEY_ACTIVE_LOW;
+	int ret;
+
+	ret = i2c_reg_write_byte_dt(&config->i2c, CP9314_REG_CRUS_CTRL, CP9314_CRUS_KEY_UNLOCK);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (config->en_pin.dt_flags == GPIO_ACTIVE_HIGH) {
+		value = CP9314_KEY_ACTIVE_HIGH;
+	}
+
+	ret = i2c_reg_update_byte_dt(&config->i2c, CP9314_REG_TRIM_9, CP9314_TM_KEY_POLARITY,
+				     value);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = i2c_reg_update_byte_dt(&config->i2c, CP9314_REG_TRIM_9, CP9314_FORCE_KEY_POLARITY,
+				     CP9314_FORCE_KEY_POLARITY);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return i2c_reg_write_byte_dt(&config->i2c, CP9314_REG_CRUS_CTRL, CP9314_CRUS_KEY_LOCK);
+}
+
 static int regulator_cp9314_init(const struct device *dev)
 {
 	const struct regulator_cp9314_config *config = dev->config;
@@ -350,21 +380,14 @@ static int regulator_cp9314_init(const struct device *dev)
 		}
 	}
 
+	ret = regulator_cp9314_cfg_en(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	if (config->en_pin.port != NULL) {
 		if (!gpio_is_ready_dt(&config->en_pin)) {
 			return -ENODEV;
-		}
-
-		if (config->en_pin.dt_flags == GPIO_ACTIVE_HIGH) {
-			value = CP9314_EN_PIN_ACTIVE_HIGH;
-		} else {
-			value = CP9314_EN_PIN_ACTIVE_LOW;
-		}
-
-		ret = i2c_reg_update_byte_dt(&config->i2c, CP9314_REG_TRIM_3,
-					     CP9314_EN_PIN_POLARITY, value);
-		if (ret < 0) {
-			return ret;
 		}
 
 		ret = gpio_pin_configure_dt(&config->en_pin, GPIO_OUTPUT_INACTIVE);
