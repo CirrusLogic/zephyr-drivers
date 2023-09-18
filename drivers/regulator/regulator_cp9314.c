@@ -83,16 +83,6 @@ static int regulator_cp9314_enable(const struct device *dev)
 		return ret;
 	}
 
-	ret = i2c_reg_read_byte_dt(&config->i2c, CP9314_FAULT1_STS, &value);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = i2c_reg_read_byte_dt(&config->i2c, CP9314_SYS_STS, &value);
-	if (ret < 0) {
-		return ret;
-	}
-
 	if (config->en_pin.port != NULL) {
 		return gpio_pin_set_dt(&config->en_pin, 1);
 	}
