@@ -315,6 +315,14 @@ static int regulator_cp9314_otp_init(const struct device *dev)
 	uint8_t value;
 	int ret;
 
+	/**
+	 * The PTE_2 field in the PTE_REG_2 register contains the value representing the OTP
+	 * burned on the CP9314 device. The PTE_2 values in relation to the OTP table names
+	 * are shown below.
+	 *
+	 * OTP-1 = 0x0, OTP-2 = 0x1, OTP-3 = 0x3, OTP-4 = 0x4
+	 */
+
 	ret = i2c_reg_read_byte_dt(&config->i2c, CP9314_REG_PTE_REG_2, &value);
 	if (ret < 0) {
 		return ret;
