@@ -9,6 +9,7 @@
 #include <zephyr/devicetree.h>
 #include "zephyr/kernel.h"
 #include <zephyr/logging/log.h>
+#include <zephyr/sys/util.h>
 
 #include "regulator_cp9314.h"
 
@@ -308,6 +309,29 @@ static int regulator_cp9314_cfg_en(const struct device *dev)
 	return i2c_reg_write_byte_dt(&config->i2c, CP9314_REG_CRUS_CTRL, CP9314_CRUS_KEY_LOCK);
 }
 
+static int regulator_cp9314_otp_init(const struct device *dev)
+{
+	const struct regulator_cp9314_config *config = dev->config;
+	uint8_t value;
+	int ret;
+
+	ret = i2c_reg_read_byte_dt(&config->i2c, CP9314_REG_PTE_REG_2, &value);
+	if (ret < 0) {
+		return ret;
+	}
+
+	value = FIELD_GET(CP9314_PTE_2_MASK, value);
+
+	if (value == CP9314_PTE_2_OTP_1) {
+		ret = cp9314_pte_otp_v0_patch(dev);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int regulator_cp9314_init(const struct device *dev)
 {
 	const struct regulator_cp9314_config *config = dev->config;
@@ -358,16 +382,9 @@ static int regulator_cp9314_init(const struct device *dev)
 
 	data->rev_id = value;
 
-	ret = i2c_reg_read_byte_dt(&config->i2c, CP9314_REG_PTE_REG_2, &value);
+	ret = regulator_cp9314_otp_init(dev);
 	if (ret < 0) {
 		return ret;
-	}
-
-	if (!value) {
-		ret = cp9314_pte_otp_v0_patch(dev);
-		if (ret < 0) {
-			return ret;
-		}
 	}
 
 	ret = regulator_cp9314_cfg_en(dev);
