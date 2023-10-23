@@ -329,6 +329,23 @@ static int regulator_cp9314_otp_init(const struct device *dev)
 		}
 	}
 
+	if (value <= CP9314_PTE_2_OTP_2) {
+		ret = i2c_reg_write_byte_dt(&config->i2c, CP9314_REG_CRUS_CTRL, CP9314_CRUS_KEY_UNLOCK);
+		if (ret < 0) {
+			return ret;
+		}
+
+		ret = i2c_reg_update_byte_dt(&config->i2c, CP9314_REG_CFG_9, CP9314_VOUT_PCHG_TIME_CFG_0, 0);
+		if (ret < 0) {
+			return ret;
+		}
+
+		ret = i2c_reg_write_byte_dt(&config->i2c, CP9314_REG_CRUS_CTRL, CP9314_CRUS_KEY_LOCK);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
 	return 0;
 }
 
