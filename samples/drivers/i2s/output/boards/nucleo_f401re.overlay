@@ -1,0 +1,51 @@
+/*
+ * Copyright 2024 Cirrus Logic, Inc.
+ *
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+ / {
+	aliases {
+		i2s-tx = &i2s_tx;
+	};
+};
+
+
+&dma1 {
+	status = "okay";
+};
+
+&clk_hsi {
+	status = "okay";
+};
+
+&pll {
+	div-m = <16>;
+	mul-n = <336>;
+	div-p = <4>;
+	div-q = <7>;
+	clocks = <&clk_hsi>;
+	status = "okay";
+};
+
+&plli2s {
+	mul-n = <271>;
+	div-r = <6>;
+	status = "okay";
+};
+
+&rcc {
+	clocks = <&pll>;
+	clock-frequency = <DT_FREQ_M(84)>;
+	ahb-prescaler = <1>;
+	apb1-prescaler = <2>;
+	apb2-prescaler = <1>;
+};
+
+i2s_tx: &i2s3 {
+	pinctrl-0 = <&i2s3_ck_pb3 &i2s3_sd_pb5 &i2s3_ws_pa4 &i2s3_mck_pc7>;
+	pinctrl-names = "default";
+	mck-enabled;
+	status = "okay";
+};
+
