@@ -35,6 +35,7 @@ module = AUDIO_CODEC
 module-str = audio codec
 source "subsys/logging/Kconfig.template.log_config"
 
+source "drivers/audio/Kconfig.cs35l56"
 source "drivers/audio/Kconfig.cs43l22"
 source "drivers/audio/Kconfig.max98091"
 source "drivers/audio/Kconfig.pcm1681"
