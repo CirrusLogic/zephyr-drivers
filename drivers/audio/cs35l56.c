@@ -42,6 +42,7 @@ struct cs35l56_config {
 struct cs35l56_data {
 	uint8_t asp1_rx[64];
 	uint8_t asp1_tx[64];
+	bool fw_patched;
 };
 
 static uint32_t cs35l56_bclk_freq_hz[] = {
@@ -425,6 +426,7 @@ static int cs35l56_fw_download(const struct device *dev)
 
 static int cs35l56_fw_patch(const struct device *dev)
 {
+	struct cs35l56_data *data = dev->data;
 	int i = 0, ret;
 	uint32_t val;
 
@@ -463,17 +465,74 @@ static int cs35l56_fw_patch(const struct device *dev)
 
 	cs35l56_log_dsp_status(dev);
 
+	data->fw_patched = true;
+
 	return 0;
 }
 
+#ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
+static int cs35l56_disable_sdca_power_settings(const struct device *dev)
+{
+	/* Undoing SDCA host power settings */
+	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_PAUSE);
+	cs35l56_reg_write(dev, CS35L56_PL_EN, 0x1);
+	cs35l56_reg_update(dev, CS35L56_AUX_NGATE_CH1_CFG, CS35L56_AUX_NGATE_CHx_EN, 0);
+	cs35l56_reg_update(dev, CS35L56_AUX_NGATE_CH2_CFG, CS35L56_AUX_NGATE_CHx_EN, 0);
+	cs35l56_reg_write(dev, CS35L56_LDPM_CONFIG, 0x10606);
+	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_REINIT);
+
+	return 0;
+}
+#endif
+
 static void cs35l56_stop_output(const struct device *dev)
 {
+#ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
+	struct cs35l56_data *data = dev->data;
+
+	if (data->fw_patched) {
+		cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
+				  CS35L56_DSP_MBOX_CMD_PAUSE_ASP_ALT);
+	} else {
+		LOG_DBG("RAM Firmware not booted, failed to stop output");
+	}
+#else
 	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_PAUSE);
+#endif
 }
 
 static void cs35l56_start_output(const struct device *dev)
 {
+#ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
+	struct cs35l56_data *data = dev->data;
+	uint32_t val;
+	int ret;
+
+	if (data->fw_patched) {
+		ret = cs35l56_reg_read(dev, CS35L56_PDE23_TRANSDUCER_REQUESTED_PS, &val);
+		if (ret < 0) {
+			LOG_DBG("Unable to determine PDE23 power state");
+			return;
+		}
+
+		if (val == CS35L56_PDE23_STATE_OFF) {
+			cs35l56_log_dsp_status(dev);
+			cs35l56_disable_sdca_power_settings(dev);
+			cs35l56_reg_write(dev, CS35L56_DSP1RX9_INPUT, CS35L56_DSP1_SRC_ASP1RX1);
+			cs35l56_reg_write(dev, CS35L56_DSP1RX10_INPUT, CS35L56_DSP1_SRC_ASP1RX2);
+			cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
+					  CS35L56_DSP_MBOX_CMD_PLAY_ASP_ALT);
+			cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN,
+					   CS35L56_ASP_EN);
+		} else {
+			LOG_ERR("PDE23 State: %x", val);
+		}
+	} else {
+		LOG_DBG("RAM Firmware not booted, failed to start output");
+	}
+#else
 	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_PLAY);
+#endif
 }
 
 static int cs35l56_asp1_set_clks(const struct device *dev, struct audio_codec_cfg *cfg)
