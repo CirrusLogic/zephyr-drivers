@@ -9,3 +9,13 @@ config AUDIO_CODEC_CS35L56
 	select REGULATOR
 	help
 	  Enable driver for CS35L56 smart amplifier
+
+if AUDIO_CODEC_CS35L56
+
+config AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
+	bool "CS35L56 SoundWire and ASP source arbitration"
+	help
+	  Enables arbitration of SoundWire and ASP audio sources where
+	  the SoundWire stream has priority over the ASP stream.
+
+endif
