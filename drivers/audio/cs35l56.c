@@ -133,6 +133,151 @@ static int cs35l56_reg_update(const struct device *dev, uint32_t reg_addr, uint3
 	return cs35l56_reg_write(dev, reg_addr, tmp);
 }
 
+static void cs35l56_log_dsp_status(const struct device *dev)
+{
+	uint32_t val;
+
+	k_msleep(50);
+	cs35l56_reg_read(dev, CS35L56_HALO_STATE, &val);
+	LOG_INF("HALO_STATE: %x", val);
+	cs35l56_reg_read(dev, CS35L56_PM_PM_CUR_STATE, &val);
+	LOG_INF("CS35L56_PM_PM_CUR_STATE: %x", val);
+	cs35l56_reg_read(dev, CS35L56_DSP1_FW_VER, &val);
+	LOG_INF("CS35L56_DSP1_FW_VER: %ld.%ld.%ld", FIELD_GET(CS35L56_DSP1_FW_REV_MAJOR_MASK, val),
+		FIELD_GET(CS35L56_DSP1_FW_REV_MINOR_MASK, val),
+		FIELD_GET(CS35L56_DSP1_FW_REV_FIX_MASK, val));
+}
+
+static int cs35l56_fw_reset(const struct device *dev)
+{
+	int i = 0, ret;
+	uint32_t val;
+
+	ret = cs35l56_reg_write(dev, CS35L56_HALO_STATE, CS35L56_DSP_STATE_PREBOOT);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
+				CS35L56_DSP_MBOX_CMD_SYSTEM_RESET);
+	if (ret < 0) {
+		return ret;
+	}
+
+	while (i < CS35L56_DSP_SYSTEM_RESET_RETIRES) {
+		ret = cs35l56_reg_read(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, &val);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (val == 0) {
+			return 0;
+		}
+
+		k_usleep(CS35L56_DSP_SYSTEM_RESET_POLL_US);
+		i++;
+	}
+
+	return -ETIME;
+}
+
+static int cs35l56_write_fw_blocks(const struct device *dev, halo_boot_block_t *blocks,
+				   int num_blocks)
+{
+	halo_boot_block_t block;
+	uint32_t bytes, address;
+	uint8_t *buffer;
+	int ret;
+
+	for (int i = 0; i < num_blocks; i++) {
+		block = blocks[i];
+		bytes = block.block_size;
+		address = block.address;
+		buffer = block.bytes;
+		ret = cs35l56_burst_write(dev, address, buffer, bytes);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int cs35l56_fw_download(const struct device *dev)
+{
+	halo_boot_block_t *blocks;
+	int num_blocks;
+
+	num_blocks = cs35l56_total_fw_blocks;
+	blocks = cs35l56_fw_blocks;
+	return cs35l56_write_fw_blocks(dev, blocks, num_blocks);
+}
+
+static int cs35l56_tuning_download(const struct device *dev, audio_channel_t channel)
+{
+	halo_boot_block_t *blocks;
+	int num_blocks;
+
+	num_blocks = cs35l56_total_coeff_blocks[channel];
+	blocks = cs35l56_coeff_blocks[channel];
+
+	return cs35l56_write_fw_blocks(dev, blocks, num_blocks);
+}
+
+
+static int cs35l56_apply_tuning(const struct device *dev, audio_channel_t channel)
+{
+	struct cs35l56_data *data = dev->data;
+	int ret;
+
+	ret = cs35l56_tuning_download(dev, channel);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l56_fw_reset(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	cs35l56_log_dsp_status(dev);
+
+	data->fw_patched = true;
+
+	return 0;
+}
+
+static int cs35l56_fw_download_prepare(const struct device *dev)
+{
+	int i = 0, ret;
+	uint32_t val;
+
+	ret = cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_SHUTDOWN);
+	if (ret < 0) {
+		return ret;
+	}
+
+	while (i < CS35L56_DSP_SHUTDOWN_RETRIES) {
+		ret = cs35l56_reg_read(dev, CS35L56_PM_PM_CUR_STATE, &val);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (val == CS35L56_PM_STATE_SHUTDOWN) {
+			break;
+		}
+
+		k_usleep(CS35L56_DSP_SHUTDOWN_POLL_US);
+		i++;
+	}
+
+	if (val != CS35L56_PM_STATE_SHUTDOWN) {
+		return -ETIME;
+	}
+
+	return 0;
+}
+
 static int cs35l56_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
 {
 	struct cs35l56_data *data = dev->data;
@@ -208,6 +353,11 @@ static int cs35l56_route_input(const struct device *dev, audio_channel_t channel
 	}
 
 	data->asp1_rx[channel] = input;
+
+	ret = cs35l56_apply_tuning(dev, channel);
+	if (ret < 0) {
+		return ret;
+	}
 
 	return 0;
 }
@@ -333,139 +483,6 @@ static int cs35l56_set_property(const struct device *dev, audio_property_t prope
 	default:
 		return -ENOTSUP;
 	}
-
-	return 0;
-}
-
-static void cs35l56_log_dsp_status(const struct device *dev)
-{
-	uint32_t val;
-
-	k_msleep(50);
-	cs35l56_reg_read(dev, CS35L56_HALO_STATE, &val);
-	LOG_INF("HALO_STATE: %x", val);
-	cs35l56_reg_read(dev, CS35L56_PM_PM_CUR_STATE, &val);
-	LOG_INF("CS35L56_PM_PM_CUR_STATE: %x", val);
-	cs35l56_reg_read(dev, CS35L56_DSP1_FW_VER, &val);
-	LOG_INF("CS35L56_DSP1_FW_VER: %ld.%ld.%ld", FIELD_GET(CS35L56_DSP1_FW_REV_MAJOR_MASK, val),
-		FIELD_GET(CS35L56_DSP1_FW_REV_MINOR_MASK, val),
-		FIELD_GET(CS35L56_DSP1_FW_REV_FIX_MASK, val));
-}
-
-static int cs35l56_fw_reset(const struct device *dev)
-{
-	int i = 0, ret;
-	uint32_t val;
-
-	ret = cs35l56_reg_write(dev, CS35L56_HALO_STATE, CS35L56_DSP_STATE_PREBOOT);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
-				CS35L56_DSP_MBOX_CMD_SYSTEM_RESET);
-	if (ret < 0) {
-		return ret;
-	}
-
-	while (i < CS35L56_DSP_SYSTEM_RESET_RETIRES) {
-		ret = cs35l56_reg_read(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, &val);
-		if (ret < 0) {
-			return ret;
-		}
-
-		if (val == 0) {
-			return 0;
-		}
-
-		k_usleep(CS35L56_DSP_SYSTEM_RESET_POLL_US);
-		i++;
-	}
-
-	return -ETIME;
-}
-
-static int cs35l56_write_fw_blocks(const struct device *dev, halo_boot_block_t *blocks,
-				   int num_blocks)
-{
-	halo_boot_block_t block;
-	uint32_t bytes, address;
-	uint8_t *buffer;
-	int ret;
-
-	for (int i = 0; i < num_blocks; i++) {
-		block = blocks[i];
-		bytes = block.block_size;
-		address = block.address;
-		buffer = block.bytes;
-		ret = cs35l56_burst_write(dev, address, buffer, bytes);
-		if (ret < 0) {
-			return ret;
-		}
-	}
-
-	return 0;
-}
-
-static int cs35l56_fw_download(const struct device *dev)
-{
-	halo_boot_block_t *blocks;
-	int num_blocks, ret;
-
-	num_blocks = cs35l56_total_fw_blocks;
-	blocks = cs35l56_fw_blocks;
-	ret = cs35l56_write_fw_blocks(dev, blocks, num_blocks);
-	if (ret < 0) {
-		return ret;
-	}
-
-	num_blocks = cs35l56_total_coeff_blocks_0;
-	blocks = cs35l56_coeff_0_blocks;
-	return cs35l56_write_fw_blocks(dev, blocks, num_blocks);
-}
-
-static int cs35l56_fw_patch(const struct device *dev)
-{
-	struct cs35l56_data *data = dev->data;
-	int i = 0, ret;
-	uint32_t val;
-
-	ret = cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_SHUTDOWN);
-	if (ret < 0) {
-		return ret;
-	}
-
-	while (i < CS35L56_DSP_SHUTDOWN_RETRIES) {
-		ret = cs35l56_reg_read(dev, CS35L56_PM_PM_CUR_STATE, &val);
-		if (ret < 0) {
-			return ret;
-		}
-
-		if (val == CS35L56_PM_STATE_SHUTDOWN) {
-			break;
-		}
-
-		k_usleep(CS35L56_DSP_SHUTDOWN_POLL_US);
-		i++;
-	}
-
-	if (val != CS35L56_PM_STATE_SHUTDOWN) {
-		return -ETIME;
-	}
-
-	ret = cs35l56_fw_download(dev);
-	if (ret < 0) {
-		return ret;
-	}
-
-	ret = cs35l56_fw_reset(dev);
-	if (ret < 0) {
-		return ret;
-	}
-
-	cs35l56_log_dsp_status(dev);
-
-	data->fw_patched = true;
 
 	return 0;
 }
@@ -827,9 +844,14 @@ static int cs35l56_init(const struct device *dev)
 		return ret;
 	}
 
-	ret = cs35l56_fw_patch(dev);
+	ret = cs35l56_fw_download_prepare(dev);
 	if (ret < 0) {
 		LOG_ERR("Failed to patch fw: %d", ret);
+		return ret;
+	}
+
+	ret = cs35l56_fw_download(dev);
+	if (ret < 0) {
 		return ret;
 	}
 
