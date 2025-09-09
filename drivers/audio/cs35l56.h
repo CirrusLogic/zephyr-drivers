@@ -5,6 +5,7 @@
  */
 
 #include "cs35l56_firmware.h"
+#include "cs35l56_firmware_map.h"
 
 #ifndef ZEPHYR_INCLUDE_CODEC_CS35L56_H_
 #define ZEPHYR_INCLUDE_CODEC_CS35L56_H_
