@@ -774,7 +774,12 @@ static int cs35l56_check_ids(const struct device *dev)
 		return ret;
 	}
 
-	if (val != 0x35A56) {
+	switch (val) {
+	case 0x35A56:
+		break;
+	case 0x35A57:
+		break;
+	default:
 		return -EINVAL;
 	}
 
