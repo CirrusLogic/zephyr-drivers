@@ -93,7 +93,7 @@ static bool cs35l56_bus_is_ready_i2c(const union cs35l56_bus *bus)
 	return device_is_ready(bus->i2c.bus);
 }
 
-static int cs35l56_burst_write(const struct device *dev, const uint32_t reg_addr,
+__maybe_unused static int cs35l56_burst_write(const struct device *dev, const uint32_t reg_addr,
 			       const uint8_t *buf, unsigned int num_bytes)
 {
 	const struct cs35l56_config *config = dev->config;
@@ -148,6 +148,7 @@ static void cs35l56_log_dsp_status(const struct device *dev)
 		FIELD_GET(CS35L56_DSP1_FW_REV_FIX_MASK, val));
 }
 
+#ifndef CONFIG_AUDIO_CODEC_CS35L56_DELEGATE_FW_LOADING
 static int cs35l56_fw_reset(const struct device *dev)
 {
 	int i = 0, ret;
@@ -277,6 +278,7 @@ static int cs35l56_fw_download_prepare(const struct device *dev)
 
 	return 0;
 }
+#endif
 
 static int cs35l56_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
 {
@@ -353,12 +355,12 @@ static int cs35l56_route_input(const struct device *dev, audio_channel_t channel
 	}
 
 	data->asp1_rx[channel] = input;
-
+#ifndef CONFIG_AUDIO_CODEC_CS35L56_DELEGATE_FW_LOADING
 	ret = cs35l56_apply_tuning(dev, channel);
 	if (ret < 0) {
 		return ret;
 	}
-
+#endif
 	return 0;
 }
 
@@ -729,7 +731,7 @@ static int cs35l56_wait_for_rom_boot(const struct device *dev)
 	return -EPERM;
 }
 
-static int cs35l56_reset(const struct device *dev)
+__maybe_unused static int cs35l56_reset(const struct device *dev)
 {
 	const struct cs35l56_config *config = dev->config;
 	int ret;
@@ -823,6 +825,7 @@ static int cs35l56_init_regulators(const struct device *dev)
 static int cs35l56_init(const struct device *dev)
 {
 	const struct cs35l56_config *config = dev->config;
+	struct cs35l56_data *data = dev->data;
 	int ret;
 
 	ret = cs35l56_init_regulators(dev);
@@ -830,13 +833,13 @@ static int cs35l56_init(const struct device *dev)
 		LOG_ERR("Failed to enable regulators: %d", ret);
 		return ret;
 	}
-
+#ifndef CONFIG_AUDIO_CODEC_CS35L56_DELEGATE_FW_LOADING
 	ret = cs35l56_reset(dev);
 	if (ret < 0) {
 		LOG_ERR("Fail to reset: %d", ret);
 		return ret;
 	}
-
+#endif
 	ret = cs35l56_wait_for_rom_boot(dev);
 	if (ret < 0) {
 		LOG_ERR("Failed to boot from ROM: %d", ret);
@@ -848,7 +851,9 @@ static int cs35l56_init(const struct device *dev)
 		LOG_ERR("Failed to check IDs: %d", ret);
 		return ret;
 	}
-
+#ifdef CONFIG_AUDIO_CODEC_CS35L56_DELEGATE_FW_LOADING
+	data->fw_patched = true;
+#else
 	ret = cs35l56_fw_download_prepare(dev);
 	if (ret < 0) {
 		LOG_ERR("Failed to patch fw: %d", ret);
@@ -859,7 +864,7 @@ static int cs35l56_init(const struct device *dev)
 	if (ret < 0) {
 		return ret;
 	}
-
+#endif
 	return cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN, CS35L56_ASP_EN);
 }
 

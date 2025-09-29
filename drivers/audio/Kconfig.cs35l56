@@ -18,4 +18,10 @@ config AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
 	  Enables arbitration of SoundWire and ASP audio sources where
 	  the SoundWire stream has priority over the ASP stream.
 
+config AUDIO_CODEC_CS35L56_DELEGATE_FW_LOADING
+	bool "CS35L56 delegate firmware loading"
+	help
+	  Delegates the loading of the RAM firmware to an auxiliary host.
+	  This option is intended for multi-host systems.
+
 endif
