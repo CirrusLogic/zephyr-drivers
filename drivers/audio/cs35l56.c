@@ -280,12 +280,12 @@ static int cs35l56_fw_download_prepare(const struct device *dev)
 }
 #endif
 
-static int cs35l56_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
+static int cs35l56_route_input(const struct device *dev, audio_channel_t channel, uint32_t input)
 {
 	struct cs35l56_data *data = dev->data;
 	int ret;
 
-	switch (output) {
+	switch (input) {
 	case CS35L56_ASP1_TX1:
 		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL1, CS35L56_ASP1_TX1_SLOT,
 					 channel);
@@ -318,17 +318,17 @@ static int cs35l56_route_output(const struct device *dev, audio_channel_t channe
 		return -EINVAL;
 	}
 
-	data->asp1_tx[channel] = output;
+	data->asp1_tx[channel] = input;
 
 	return 0;
 }
 
-static int cs35l56_route_input(const struct device *dev, audio_channel_t channel, uint32_t input)
+static int cs35l56_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
 {
 	struct cs35l56_data *data = dev->data;
 	int ret;
 
-	switch (input) {
+	switch (output) {
 	case CS35L56_ASP1_RX1:
 		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL5, CS35L56_ASP1_RX1_SLOT,
 					 channel);
@@ -354,7 +354,7 @@ static int cs35l56_route_input(const struct device *dev, audio_channel_t channel
 		return -EINVAL;
 	}
 
-	data->asp1_rx[channel] = input;
+	data->asp1_rx[channel] = output;
 #ifndef CONFIG_AUDIO_CODEC_CS35L56_DELEGATE_FW_LOADING
 	ret = cs35l56_apply_tuning(dev, channel);
 	if (ret < 0) {
@@ -478,9 +478,9 @@ static int cs35l56_set_property(const struct device *dev, audio_property_t prope
 				audio_channel_t channel, audio_property_value_t val)
 {
 	switch (property) {
-	case AUDIO_PROPERTY_INPUT_MUTE:
-		return cs35l56_asp1_rx_set_mute(dev, channel, val);
 	case AUDIO_PROPERTY_OUTPUT_MUTE:
+		return cs35l56_asp1_rx_set_mute(dev, channel, val);
+	case AUDIO_PROPERTY_INPUT_MUTE:
 		return cs35l56_asp1_tx_set_mute(dev, channel, val);
 	default:
 		return -ENOTSUP;
