@@ -148,6 +148,7 @@
 #endif
 #define CS35L56_PDE23_STATE_ACTIVE            0x0
 #define CS35L56_PDE23_STATE_OFF               0x3
+#define CS35L56_ASP_ALT_VOLUME                0x2805fbc
 
 /* Timing characteristics */
 #define CS35L56_T_RLPW_US        1000

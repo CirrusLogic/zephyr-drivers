@@ -369,6 +369,17 @@ static int cs35l56_apply_properties(const struct device *dev)
 	return 0;
 }
 
+static int cs35l56_asp_alt_set_volume(const struct device *dev, audio_channel_t channel,
+				      audio_property_value_t audio_val)
+{
+	if (channel != AUDIO_CHANNEL_ALL) {
+		return -EINVAL;
+	}
+
+	/* Value must be decibels in S7.8 format */
+	return cs35l56_reg_write(dev, CS35L56_ASP_ALT_VOLUME, (uint32_t)audio_val.vol);
+}
+
 static int cs35l56_asp1_tx_set_mute(const struct device *dev, audio_channel_t channel,
 				    audio_property_value_t audio_val)
 {
@@ -482,6 +493,10 @@ static int cs35l56_set_property(const struct device *dev, audio_property_t prope
 		return cs35l56_asp1_rx_set_mute(dev, channel, val);
 	case AUDIO_PROPERTY_INPUT_MUTE:
 		return cs35l56_asp1_tx_set_mute(dev, channel, val);
+#ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
+	case AUDIO_PROPERTY_OUTPUT_VOLUME:
+		return cs35l56_asp_alt_set_volume(dev, channel, val);
+#endif
 	default:
 		return -ENOTSUP;
 	}
