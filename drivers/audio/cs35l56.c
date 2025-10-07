@@ -508,12 +508,9 @@ static int cs35l56_set_property(const struct device *dev, audio_property_t prope
 static int cs35l56_disable_sdca_power_settings(const struct device *dev)
 {
 	/* Undoing SDCA host power settings */
-	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_PAUSE);
-	cs35l56_reg_write(dev, CS35L56_PL_EN, 0x1);
 	cs35l56_reg_update(dev, CS35L56_AUX_NGATE_CH1_CFG, CS35L56_AUX_NGATE_CHx_EN, 0);
 	cs35l56_reg_update(dev, CS35L56_AUX_NGATE_CH2_CFG, CS35L56_AUX_NGATE_CHx_EN, 0);
 	cs35l56_reg_write(dev, CS35L56_LDPM_CONFIG, 0x10606);
-	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_REINIT);
 
 	return 0;
 }
