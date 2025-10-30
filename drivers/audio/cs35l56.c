@@ -11,6 +11,8 @@
 #include <zephyr/audio/codec.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/regulator.h>
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
 #if DT_ANY_INST_ON_BUS_STATUS_OKAY(i2c)
 #include <zephyr/drivers/i2c.h>
 #include <zephyr/sys/byteorder.h>
@@ -367,6 +369,11 @@ static int cs35l56_route_input(const struct device *dev, audio_channel_t channel
 	struct cs35l56_data *data = dev->data;
 	int ret;
 
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	switch (input) {
 	case CS35L56_ASP1_TX1:
 		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL1,
@@ -405,13 +412,18 @@ static int cs35l56_route_input(const struct device *dev, audio_channel_t channel
 
 	data->asp1_tx[channel] = input;
 
-	return 0;
+	return pm_device_runtime_put(dev);
 }
 
 static int cs35l56_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
 {
 	struct cs35l56_data *data = dev->data;
 	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
 
 	switch (output) {
 	case CS35L56_ASP1_RX1:
@@ -448,7 +460,7 @@ static int cs35l56_route_output(const struct device *dev, audio_channel_t channe
 		return ret;
 	}
 #endif
-	return 0;
+	return pm_device_runtime_put(dev);
 }
 
 static int cs35l56_apply_properties(const struct device *dev)
@@ -591,6 +603,13 @@ static int cs35l56_asp1_rx_set_mute(const struct device *dev, audio_channel_t ch
 static int cs35l56_set_property(const struct device *dev, audio_property_t property,
 				audio_channel_t channel, audio_property_value_t val)
 {
+	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	switch (property) {
 	case AUDIO_PROPERTY_OUTPUT_MUTE:
 		return cs35l56_asp1_rx_set_mute(dev, channel, val);
@@ -604,7 +623,7 @@ static int cs35l56_set_property(const struct device *dev, audio_property_t prope
 		return -ENOTSUP;
 	}
 
-	return 0;
+	return pm_device_runtime_put(dev);
 }
 
 #ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
@@ -633,10 +652,13 @@ static void cs35l56_stop_output(const struct device *dev)
 #else
 	cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1, CS35L56_DSP_MBOX_CMD_PAUSE);
 #endif
+
+	pm_device_runtime_put(dev);
 }
 
 static void cs35l56_start_output(const struct device *dev)
 {
+	pm_device_runtime_get(dev);
 #ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
 	struct cs35l56_data *data = dev->data;
 	uint32_t val;
@@ -809,6 +831,11 @@ static int cs35l56_configure(const struct device *dev, struct audio_codec_cfg *c
 {
 	int ret;
 
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	ret = cs35l56_asp1_set_clks(dev, cfg);
 	if (ret < 0) {
 		LOG_ERR("Failed to set clocks");
@@ -821,7 +848,7 @@ static int cs35l56_configure(const struct device *dev, struct audio_codec_cfg *c
 		return ret;
 	}
 
-	return 0;
+	return pm_device_runtime_put(dev);
 }
 
 static int cs35l56_wait_for_rom_boot(const struct device *dev)
@@ -983,6 +1010,56 @@ static int cs35l56_init(const struct device *dev)
 	return cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN, CS35L56_ASP_EN);
 }
 
+#ifdef CONFIG_PM_DEVICE
+static void cs35l56_issue_wake_event(const struct device *dev)
+{
+	uint32_t value;
+
+	(void)cs35l56_reg_read(dev, CS35L56_IRQ1_STATUS, &value);
+
+	k_usleep(CS35L56_WAKE_HOLD_TIME_US);
+
+	(void)cs35l56_reg_read(dev, CS35L56_IRQ1_STATUS, &value);
+
+	k_usleep(CS35L56_T_IRS_US);
+}
+
+static int cs35l56_device_pm_action_suspend(const struct device *dev)
+{
+	return cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
+				 CS35L56_DSP_MBOX_CMD_ALLOW_HIBER);
+}
+
+static int cs35l56_device_pm_action_resume(const struct device *dev)
+{
+	int ret;
+
+	cs35l56_issue_wake_event(dev);
+
+	ret = cs35l56_wait_for_rom_boot(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
+				 CS35L56_DSP_MBOX_CMD_PREVENT_HIBER);
+}
+
+static int cs35l56_device_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_RESUME:
+		return cs35l56_device_pm_action_resume(dev);
+	case PM_DEVICE_ACTION_SUSPEND:
+		return cs35l56_device_pm_action_suspend(dev);
+	default:
+		return -ENOTSUP;
+	}
+
+	return 0;
+}
+#endif
+
 static const struct audio_codec_api api = {
 	.configure = cs35l56_configure,
 	.start_output = cs35l56_start_output,
@@ -994,8 +1071,10 @@ static const struct audio_codec_api api = {
 };
 
 #define CS35L56_DEVICE_INIT(inst)                                                                  \
-	DEVICE_DT_INST_DEFINE(inst, cs35l56_init, NULL, &cs35l56_data_##inst,                      \
-			      &cs35l56_config_##inst, POST_KERNEL,                                 \
+	PM_DEVICE_DT_INST_DEFINE(inst, cs35l56_device_pm_action);                                  \
+                                                                                                   \
+	DEVICE_DT_INST_DEFINE(inst, cs35l56_init, PM_DEVICE_DT_INST_GET(inst),                     \
+			      &cs35l56_data_##inst, &cs35l56_config_##inst, POST_KERNEL,           \
 			      CONFIG_AUDIO_CODEC_INIT_PRIORITY, &api);
 
 #define CS35L56_CONFIG(inst)                                                                       \
