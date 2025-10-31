@@ -8,9 +8,17 @@
  **************************************
  */
 
-drv2605@0 {
-	compatible = "ti,drv2605";
+cs40l5x@0 {
+	compatible = "cirrus,cs40l5x";
 	reg = <0x0>;
+	status = "okay";
+
+	reset-gpios = <&test_gpio 0 0>;
+};
+
+drv2605@1 {
+	compatible = "ti,drv2605";
+	reg = <0x1>;
 	status = "okay";
 
 	actuator-mode = "LRA";
