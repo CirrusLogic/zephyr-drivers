@@ -966,7 +966,6 @@ static int cs35l56_init_regulators(const struct device *dev)
 
 static int cs35l56_init(const struct device *dev)
 {
-	const struct cs35l56_config *config = dev->config;
 	struct cs35l56_data *data = dev->data;
 	int ret;
 
