@@ -45,6 +45,32 @@ struct cs35l56_data {
 	bool fw_patched;
 };
 
+struct cs35l56_reg_sequence {
+	uint32_t addr;
+	uint32_t data;
+};
+
+#define REG_SEQ(_addr, _data)                                                                      \
+	{                                                                                          \
+		.addr = _addr,                                                                     \
+		.data = _data,                                                                     \
+	}
+
+static struct cs35l56_reg_sequence cs35l56_asp_context[] = {
+	REG_SEQ(CS35L56_ASP1_ENABLES1, 0x0),
+	REG_SEQ(CS35L56_ASP1_CONTROL1, 0x28),
+	REG_SEQ(CS35L56_ASP1_CONTROL2, 0x18180200),
+	REG_SEQ(CS35L56_ASP1_FRAME_CONTROL1, 0x3020100),
+	REG_SEQ(CS35L56_ASP1_FRAME_CONTROL5, 0x20100),
+	REG_SEQ(CS35L56_ASP1_DATA_CONTROL1, 0x18),
+	REG_SEQ(CS35L56_ASP1_DATA_CONTROL5, 0x18),
+#ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
+	REG_SEQ(CS35L56_DSP1RX9_INPUT, CS35L56_DSP1_SRC_ASP1RX1),
+	REG_SEQ(CS35L56_DSP1RX10_INPUT, CS35L56_DSP1_SRC_ASP1RX2),
+	REG_SEQ(CS35L56_ASP_ALT_VOLUME, 0x0),
+#endif
+};
+
 static uint32_t cs35l56_bclk_freq_hz[] = {
 	[0xc] = 128000,    [0xf] = 256000,    [0x11] = 384000,   [0x12] = 512000,
 	[0x15] = 768000,   [0x17] = 1024000,  [0x19] = 1411200,  [0x1a] = 1500000,
@@ -94,7 +120,7 @@ static bool cs35l56_bus_is_ready_i2c(const union cs35l56_bus *bus)
 }
 
 __maybe_unused static int cs35l56_burst_write(const struct device *dev, const uint32_t reg_addr,
-			       const uint8_t *buf, unsigned int num_bytes)
+					      const uint8_t *buf, unsigned int num_bytes)
 {
 	const struct cs35l56_config *config = dev->config;
 	uint8_t addr_buf[sizeof(reg_addr)];
@@ -131,6 +157,63 @@ static int cs35l56_reg_update(const struct device *dev, uint32_t reg_addr, uint3
 	tmp |= val & mask;
 
 	return cs35l56_reg_write(dev, reg_addr, tmp);
+}
+
+static int cs35l56_asp_context_restore(const struct device *dev)
+{
+	int ret;
+
+	for (int i = 0; i < ARRAY_SIZE(cs35l56_asp_context); i++) {
+		ret = cs35l56_reg_write(dev, cs35l56_asp_context[i].addr,
+					cs35l56_asp_context[i].data);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int cs35l56_asp_context_get_idx(const uint32_t addr)
+{
+	for (int i = 0; i < ARRAY_SIZE(cs35l56_asp_context); i++) {
+		if (addr == cs35l56_asp_context[i].addr) {
+			return i;
+		}
+	}
+
+	return -EINVAL;
+}
+
+static int cs35l56_asp_context_write(const struct device *dev, const uint32_t addr,
+				     const uint32_t val)
+{
+	int i = cs35l56_asp_context_get_idx(addr);
+
+	if (i < 0) {
+		return i;
+	}
+
+	cs35l56_asp_context[i].data = val;
+
+	return 0;
+}
+
+static int cs35l56_asp_context_update(const struct device *dev, const uint32_t addr,
+				      const uint32_t mask, const uint32_t val)
+{
+	uint32_t tmp, orig;
+	int ret;
+
+	ret = cs35l56_reg_read(dev, addr, &orig);
+	if (ret < 0) {
+		return ret;
+	}
+
+	tmp = orig & ~mask;
+	tmp |= val & mask;
+
+	return cs35l56_asp_context_write(dev, addr, tmp);
 }
 
 static void cs35l56_log_dsp_status(const struct device *dev)
@@ -225,7 +308,6 @@ static int cs35l56_tuning_download(const struct device *dev, audio_channel_t cha
 	return cs35l56_write_fw_blocks(dev, blocks, num_blocks);
 }
 
-
 static int cs35l56_apply_tuning(const struct device *dev, audio_channel_t channel)
 {
 	struct cs35l56_data *data = dev->data;
@@ -287,29 +369,32 @@ static int cs35l56_route_input(const struct device *dev, audio_channel_t channel
 
 	switch (input) {
 	case CS35L56_ASP1_TX1:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL1, CS35L56_ASP1_TX1_SLOT,
-					 channel);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL1,
+						 CS35L56_ASP1_TX1_SLOT, channel);
 		if (ret < 0) {
 			return ret;
 		}
 		break;
 	case CS35L56_ASP1_TX2:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL1, CS35L56_ASP1_TX2_SLOT,
-					 channel << CS35L56_ASP1_TX2_SHIFT);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL1,
+						 CS35L56_ASP1_TX2_SLOT,
+						 channel << CS35L56_ASP1_TX2_SHIFT);
 		if (ret < 0) {
 			return ret;
 		}
 		break;
 	case CS35L56_ASP1_TX3:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL1, CS35L56_ASP1_TX3_SLOT,
-					 channel << CS35L56_ASP1_TX3_SHIFT);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL1,
+						 CS35L56_ASP1_TX3_SLOT,
+						 channel << CS35L56_ASP1_TX3_SHIFT);
 		if (ret < 0) {
 			return ret;
 		}
 		break;
 	case CS35L56_ASP1_TX4:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL1, CS35L56_ASP1_TX4_SLOT,
-					 channel << CS35L56_ASP1_TX4_SHIFT);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL1,
+						 CS35L56_ASP1_TX4_SLOT,
+						 channel << CS35L56_ASP1_TX4_SHIFT);
 		if (ret < 0) {
 			return ret;
 		}
@@ -330,22 +415,24 @@ static int cs35l56_route_output(const struct device *dev, audio_channel_t channe
 
 	switch (output) {
 	case CS35L56_ASP1_RX1:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL5, CS35L56_ASP1_RX1_SLOT,
-					 channel);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL5,
+						 CS35L56_ASP1_RX1_SLOT, channel);
 		if (ret < 0) {
 			return ret;
 		}
 		break;
 	case CS35L56_ASP1_RX2:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL5, CS35L56_ASP1_RX2_SLOT,
-					 channel << CS35L56_ASP1_RX2_SHIFT);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL5,
+						 CS35L56_ASP1_RX2_SLOT,
+						 channel << CS35L56_ASP1_RX2_SHIFT);
 		if (ret < 0) {
 			return ret;
 		}
 		break;
 	case CS35L56_ASP1_RX3:
-		ret = cs35l56_reg_update(dev, CS35L56_ASP1_FRAME_CONTROL5, CS35L56_ASP1_RX3_SLOT,
-					 channel << CS35L56_ASP1_RX3_SHIFT);
+		ret = cs35l56_asp_context_update(dev, CS35L56_ASP1_FRAME_CONTROL5,
+						 CS35L56_ASP1_RX3_SLOT,
+						 channel << CS35L56_ASP1_RX3_SHIFT);
 		if (ret < 0) {
 			return ret;
 		}
@@ -372,12 +459,19 @@ static int cs35l56_apply_properties(const struct device *dev)
 static int cs35l56_asp_alt_set_volume(const struct device *dev, audio_channel_t channel,
 				      audio_property_value_t audio_val)
 {
+	int ret;
+
 	if (channel != AUDIO_CHANNEL_ALL) {
 		return -EINVAL;
 	}
 
 	/* Value must be decibels in S7.8 format */
-	return cs35l56_reg_write(dev, CS35L56_ASP_ALT_VOLUME, (uint32_t)audio_val.vol);
+	ret = cs35l56_reg_write(dev, CS35L56_ASP_ALT_VOLUME, (uint32_t)audio_val.vol);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return cs35l56_asp_context_write(dev, CS35L56_ASP_ALT_VOLUME, (uint32_t)audio_val.vol);
 }
 
 static int cs35l56_asp1_tx_set_mute(const struct device *dev, audio_channel_t channel,
@@ -393,7 +487,8 @@ static int cs35l56_asp1_tx_set_mute(const struct device *dev, audio_channel_t ch
 		} else {
 			val = CS35L56_ASP1_TX_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX_EN,
+						  val);
 	}
 
 	if (input == 0) {
@@ -407,28 +502,32 @@ static int cs35l56_asp1_tx_set_mute(const struct device *dev, audio_channel_t ch
 		} else {
 			val = CS35L56_ASP1_TX1_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX1_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX1_EN,
+						  val);
 	case CS35L56_ASP1_TX2:
 		if (audio_val.mute) {
 			val = 0;
 		} else {
 			val = CS35L56_ASP1_TX2_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX2_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX2_EN,
+						  val);
 	case CS35L56_ASP1_TX3:
 		if (audio_val.mute) {
 			val = 0;
 		} else {
 			val = CS35L56_ASP1_TX3_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX3_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX3_EN,
+						  val);
 	case CS35L56_ASP1_TX4:
 		if (audio_val.mute) {
 			val = 0;
 		} else {
 			val = CS35L56_ASP1_TX4_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX4_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_TX4_EN,
+						  val);
 	default:
 		return -EINVAL;
 	}
@@ -449,7 +548,8 @@ static int cs35l56_asp1_rx_set_mute(const struct device *dev, audio_channel_t ch
 		} else {
 			val = CS35L56_ASP1_RX_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX_EN,
+						  val);
 	}
 
 	if (input == 0) {
@@ -463,21 +563,24 @@ static int cs35l56_asp1_rx_set_mute(const struct device *dev, audio_channel_t ch
 		} else {
 			val = CS35L56_ASP1_RX1_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX1_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX1_EN,
+						  val);
 	case CS35L56_ASP1_RX2:
 		if (audio_val.mute) {
 			val = 0;
 		} else {
 			val = CS35L56_ASP1_RX2_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX2_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX2_EN,
+						  val);
 	case CS35L56_ASP1_RX3:
 		if (audio_val.mute) {
 			val = 0;
 		} else {
 			val = CS35L56_ASP1_RX3_EN;
 		}
-		return cs35l56_reg_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX3_EN, val);
+		return cs35l56_asp_context_update(dev, CS35L56_ASP1_ENABLES1, CS35L56_ASP1_RX3_EN,
+						  val);
 	default:
 		return -EINVAL;
 	}
@@ -547,10 +650,9 @@ static void cs35l56_start_output(const struct device *dev)
 		}
 
 		if (val == CS35L56_PDE23_STATE_OFF) {
+			cs35l56_asp_context_restore(dev);
 			cs35l56_log_dsp_status(dev);
 			cs35l56_disable_sdca_power_settings(dev);
-			cs35l56_reg_write(dev, CS35L56_DSP1RX9_INPUT, CS35L56_DSP1_SRC_ASP1RX1);
-			cs35l56_reg_write(dev, CS35L56_DSP1RX10_INPUT, CS35L56_DSP1_SRC_ASP1RX2);
 			cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
 					  CS35L56_DSP_MBOX_CMD_PLAY_ASP_ALT);
 			cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN,
@@ -594,7 +696,7 @@ static int cs35l56_asp1_set_clks(const struct device *dev, struct audio_codec_cf
 		return -EINVAL;
 	}
 
-	ret = cs35l56_reg_write(dev, CS35L56_ASP1_CONTROL1, asp1_bclk_freq);
+	ret = cs35l56_asp_context_write(dev, CS35L56_ASP1_CONTROL1, asp1_bclk_freq);
 	if (ret < 0) {
 		return ret;
 	}
@@ -619,7 +721,8 @@ static int cs35l56_asp1_set_clks(const struct device *dev, struct audio_codec_cf
 		clk_opt |= CS35L56_ASP1_FSYNC_INV;
 	}
 
-	return cs35l56_reg_update(dev, CS35L56_ASP1_CONTROL2, CS35L56_BCLK_FSYNC_MASK, clk_opt);
+	return cs35l56_asp_context_update(dev, CS35L56_ASP1_CONTROL2, CS35L56_BCLK_FSYNC_MASK,
+					  clk_opt);
 }
 
 static int cs35l56_asp1_set_word(const struct device *dev, struct audio_codec_cfg *cfg)
@@ -649,7 +752,7 @@ static int cs35l56_asp1_set_word(const struct device *dev, struct audio_codec_cf
 
 	switch (cfg->dai_route) {
 	case AUDIO_ROUTE_PLAYBACK:
-		ret = cs35l56_reg_write(dev, CS35L56_ASP1_DATA_CONTROL5, i2s.word_size);
+		ret = cs35l56_asp_context_write(dev, CS35L56_ASP1_DATA_CONTROL5, i2s.word_size);
 		if (ret < 0) {
 			return ret;
 		}
@@ -657,12 +760,12 @@ static int cs35l56_asp1_set_word(const struct device *dev, struct audio_codec_cf
 		val = FIELD_PREP(CS35L56_ASP1_RX_WIDTH, asp1_width);
 		break;
 	case AUDIO_ROUTE_PLAYBACK_CAPTURE:
-		ret = cs35l56_reg_write(dev, CS35L56_ASP1_DATA_CONTROL5, i2s.word_size);
+		ret = cs35l56_asp_context_write(dev, CS35L56_ASP1_DATA_CONTROL5, i2s.word_size);
 		if (ret < 0) {
 			return ret;
 		}
 
-		ret = cs35l56_reg_write(dev, CS35L56_ASP1_DATA_CONTROL1, i2s.word_size);
+		ret = cs35l56_asp_context_write(dev, CS35L56_ASP1_DATA_CONTROL1, i2s.word_size);
 		if (ret < 0) {
 			return ret;
 		}
@@ -671,7 +774,7 @@ static int cs35l56_asp1_set_word(const struct device *dev, struct audio_codec_cf
 		val |= FIELD_PREP(CS35L56_ASP1_TX_WIDTH, asp1_width);
 		break;
 	case AUDIO_ROUTE_CAPTURE:
-		ret = cs35l56_reg_write(dev, CS35L56_ASP1_DATA_CONTROL1, i2s.word_size);
+		ret = cs35l56_asp_context_write(dev, CS35L56_ASP1_DATA_CONTROL1, i2s.word_size);
 		if (ret < 0) {
 			return ret;
 		}
@@ -698,8 +801,8 @@ static int cs35l56_asp1_set_word(const struct device *dev, struct audio_codec_cf
 
 	val |= FIELD_PREP(CS35L56_ASP1_FMT_MASK, asp1_fmt);
 
-	return cs35l56_reg_update(dev, CS35L56_ASP1_CONTROL2,
-				  (CS35L56_ASP1_FMT_MASK | CS35L56_ASP1_WIDTH), val);
+	return cs35l56_asp_context_update(dev, CS35L56_ASP1_CONTROL2,
+					  (CS35L56_ASP1_FMT_MASK | CS35L56_ASP1_WIDTH), val);
 }
 
 static int cs35l56_configure(const struct device *dev, struct audio_codec_cfg *cfg)
