@@ -765,7 +765,7 @@ static int cs35l56_asp1_set_word(const struct device *dev, struct audio_codec_cf
 	if (i2s.word_size == AUDIO_PCM_WIDTH_16_BITS) {
 		asp1_width = i2s.word_size;
 	} else {
-		asp1_width = AUDIO_PCM_WIDTH_32_BITS * 2;
+		asp1_width = AUDIO_PCM_WIDTH_32_BITS;
 	}
 
 	if (!IN_RANGE(asp1_width, CS35L56_ASP1_WIDTH_MIN, CS35L56_ASP1_WIDTH_MAX)) {
