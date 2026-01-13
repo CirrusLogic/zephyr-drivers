@@ -41,15 +41,17 @@ struct cs35l56_config {
 	cs35l56_bus_is_ready_fn bus_is_ready;
 };
 
-struct cs35l56_data {
-	uint8_t asp1_rx[64];
-	uint8_t asp1_tx[64];
-	bool fw_patched;
-};
-
 struct cs35l56_reg_sequence {
 	uint32_t addr;
 	uint32_t data;
+};
+
+struct cs35l56_data {
+	struct cs35l56_reg_sequence *asp_context;
+	int asp_context_size;
+	uint8_t asp1_rx[64];
+	uint8_t asp1_tx[64];
+	bool fw_patched;
 };
 
 #define REG_SEQ(_addr, _data)                                                                      \
@@ -57,21 +59,6 @@ struct cs35l56_reg_sequence {
 		.addr = _addr,                                                                     \
 		.data = _data,                                                                     \
 	}
-
-static struct cs35l56_reg_sequence cs35l56_asp_context[] = {
-	REG_SEQ(CS35L56_ASP1_ENABLES1, 0x0),
-	REG_SEQ(CS35L56_ASP1_CONTROL1, 0x28),
-	REG_SEQ(CS35L56_ASP1_CONTROL2, 0x18180200),
-	REG_SEQ(CS35L56_ASP1_FRAME_CONTROL1, 0x3020100),
-	REG_SEQ(CS35L56_ASP1_FRAME_CONTROL5, 0x20100),
-	REG_SEQ(CS35L56_ASP1_DATA_CONTROL1, 0x18),
-	REG_SEQ(CS35L56_ASP1_DATA_CONTROL5, 0x18),
-#ifdef CONFIG_AUDIO_CODEC_CS35L56_SOUNDWIRE_ASP_ARBITRATION
-	REG_SEQ(CS35L56_DSP1RX9_INPUT, CS35L56_DSP1_SRC_ASP1RX1),
-	REG_SEQ(CS35L56_DSP1RX10_INPUT, CS35L56_DSP1_SRC_ASP1RX2),
-	REG_SEQ(CS35L56_ASP_ALT_VOLUME, 0x0),
-#endif
-};
 
 static uint32_t cs35l56_bclk_freq_hz[] = {
 	[0xc] = 128000,    [0xf] = 256000,    [0x11] = 384000,   [0x12] = 512000,
@@ -163,11 +150,11 @@ static int cs35l56_reg_update(const struct device *dev, uint32_t reg_addr, uint3
 
 static int cs35l56_asp_context_restore(const struct device *dev)
 {
+	struct cs35l56_data *data = dev->data;
 	int ret;
 
-	for (int i = 0; i < ARRAY_SIZE(cs35l56_asp_context); i++) {
-		ret = cs35l56_reg_write(dev, cs35l56_asp_context[i].addr,
-					cs35l56_asp_context[i].data);
+	for (int i = 0; i < data->asp_context_size; i++) {
+		ret = cs35l56_reg_write(dev, data->asp_context[i].addr, data->asp_context[i].data);
 		if (ret < 0) {
 			return ret;
 		}
@@ -176,10 +163,12 @@ static int cs35l56_asp_context_restore(const struct device *dev)
 	return 0;
 }
 
-static int cs35l56_asp_context_get_idx(const uint32_t addr)
+static int cs35l56_asp_context_get_idx(const struct device *dev, const uint32_t addr)
 {
-	for (int i = 0; i < ARRAY_SIZE(cs35l56_asp_context); i++) {
-		if (addr == cs35l56_asp_context[i].addr) {
+	struct cs35l56_data *data = dev->data;
+
+	for (int i = 0; i < data->asp_context_size; i++) {
+		if (addr == data->asp_context[i].addr) {
 			return i;
 		}
 	}
@@ -190,13 +179,14 @@ static int cs35l56_asp_context_get_idx(const uint32_t addr)
 static int cs35l56_asp_context_write(const struct device *dev, const uint32_t addr,
 				     const uint32_t val)
 {
-	int i = cs35l56_asp_context_get_idx(addr);
+	int i = cs35l56_asp_context_get_idx(dev, addr);
+	struct cs35l56_data *data = dev->data;
 
 	if (i < 0) {
 		return i;
 	}
 
-	cs35l56_asp_context[i].data = val;
+	data->asp_context[i].data = val;
 
 	return 0;
 }
@@ -1088,9 +1078,26 @@ static const struct audio_codec_api api = {
 	 .bus_is_ready = cs35l56_bus_is_ready_i2c,                                                 \
 	 CS35L56_CONFIG(inst)}
 
+#define CS35L56_DATA(inst)                                                                         \
+	{.asp_context = cs35l56_asp_context_##inst,                                                \
+	 .asp_context_size = ARRAY_SIZE(cs35l56_asp_context_##inst)}
+
 #define CS35L56_DEFINE_I2C(inst)                                                                   \
+	static struct cs35l56_reg_sequence cs35l56_asp_context_##inst[] = {                        \
+		REG_SEQ(CS35L56_ASP1_ENABLES1, 0x0),                                               \
+		REG_SEQ(CS35L56_ASP1_CONTROL1, 0x28),                                              \
+		REG_SEQ(CS35L56_ASP1_CONTROL2, 0x18180200),                                        \
+		REG_SEQ(CS35L56_ASP1_FRAME_CONTROL1, 0x3020100),                                   \
+		REG_SEQ(CS35L56_ASP1_FRAME_CONTROL5, 0x20100),                                     \
+		REG_SEQ(CS35L56_ASP1_DATA_CONTROL1, 0x18),                                         \
+		REG_SEQ(CS35L56_ASP1_DATA_CONTROL5, 0x18),                                         \
+		REG_SEQ(CS35L56_DSP1RX9_INPUT, CS35L56_DSP1_SRC_ASP1RX1),                          \
+		REG_SEQ(CS35L56_DSP1RX10_INPUT, CS35L56_DSP1_SRC_ASP1RX2),                         \
+		REG_SEQ(CS35L56_ASP_ALT_VOLUME, 0x0),                                              \
+	};                                                                                         \
+                                                                                                   \
 	static struct cs35l56_config cs35l56_config_##inst = CS35L56_CONFIG_I2C(inst);             \
-	static struct cs35l56_data cs35l56_data_##inst;                                            \
+	static struct cs35l56_data cs35l56_data_##inst = CS35L56_DATA(inst);                       \
 	CS35L56_DEVICE_INIT(inst)
 
 #define AUDIO_CODEC_CS35L56_DEFINE(inst) CS35L56_DEFINE_I2C(inst)
