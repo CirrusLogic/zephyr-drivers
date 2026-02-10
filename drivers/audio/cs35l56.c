@@ -39,6 +39,7 @@ struct cs35l56_config {
 	const struct device *vdd_p;
 	const union cs35l56_bus bus;
 	cs35l56_bus_is_ready_fn bus_is_ready;
+	uint8_t preempt_config;
 };
 
 struct cs35l56_reg_sequence {
@@ -956,6 +957,7 @@ static int cs35l56_init_regulators(const struct device *dev)
 
 static int cs35l56_init(const struct device *dev)
 {
+	const struct cs35l56_config *config = dev->config;
 	struct cs35l56_data *data = dev->data;
 	int ret;
 
@@ -996,6 +998,12 @@ static int cs35l56_init(const struct device *dev)
 		return ret;
 	}
 #endif
+
+	ret = cs35l56_reg_write(dev, CS35L56_PREEMPT_CONFIG, config->preempt_config);
+	if (ret < 0) {
+		return ret;
+	}
+
 	return cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN, CS35L56_ASP_EN);
 }
 
@@ -1071,6 +1079,7 @@ static const struct audio_codec_api api = {
 	.vdd_b = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(vdd_b)),                                       \
 	.vdd_p = DEVICE_DT_GET(DT_NODELABEL(vdd_p)),                                               \
 	.vdd_a = DEVICE_DT_GET_OR_NULL(DT_NODELABEL(vdd_a)),                                       \
+	.preempt_config = DT_INST_ENUM_IDX_OR(inst, cirrus_preempt_config, 0),                     \
 	.reset_gpio = GPIO_DT_SPEC_INST_GET_OR(inst, reset_gpios, {0}),
 
 #define CS35L56_CONFIG_I2C(inst)                                                                   \

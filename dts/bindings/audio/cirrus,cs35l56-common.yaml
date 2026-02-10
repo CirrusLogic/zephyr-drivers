@@ -6,3 +6,12 @@ properties:
     type: phandle-array
     description: |
       Active low signal used to reset the device to default state.
+
+  cirrus,preempt-config:
+    type: string
+    description: |
+      Sets the audio source preemption priority
+    enum:
+      - "No preemption"
+      - "SoundWire"
+      - "ASP"
