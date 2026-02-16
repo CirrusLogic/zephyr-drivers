@@ -1,0 +1,31 @@
+# Copyright 2026 Cirrus Logic, Inc.
+# SPDX-License-Identifier: Apache-2.0
+
+properties:
+  reset-gpios:
+    type: phandle-array
+    description: |
+      Active-low reset input
+
+  int-gpios:
+    type: phandle-array
+    description: |
+      Programmable open-drain interrupt output.
+
+  cirrus,asp-sdout-hiz-ctrl:
+    type: int
+    description:
+      Audio serial port SDOUT Hi-Z control.
+    enum: [0, 1, 2, 3]
+    default: 0
+
+  cirrus,amp-gain-pcm:
+    type: string
+    description:
+      Amplifier analog gain
+    enum:
+      - 10 dBV
+      - 13 dBV
+      - 16 dBV
+      - 19 dBV
+    default: "19 dBV"
