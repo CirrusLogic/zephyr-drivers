@@ -656,23 +656,14 @@ static void cs35l56_start_output(const struct device *dev)
 	int ret;
 
 	if (data->fw_patched) {
-		ret = cs35l56_reg_read(dev, CS35L56_PDE23_TRANSDUCER_REQUESTED_PS, &val);
-		if (ret < 0) {
-			LOG_DBG("Unable to determine PDE23 power state");
-			return;
-		}
+		cs35l56_asp_context_restore(dev);
+		cs35l56_log_dsp_status(dev);
+		cs35l56_disable_sdca_power_settings(dev);
+		cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
+					CS35L56_DSP_MBOX_CMD_PLAY_ASP_ALT);
+		cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN,
+					CS35L56_ASP_EN);
 
-		if (val == CS35L56_PDE23_STATE_OFF) {
-			cs35l56_asp_context_restore(dev);
-			cs35l56_log_dsp_status(dev);
-			cs35l56_disable_sdca_power_settings(dev);
-			cs35l56_reg_write(dev, CS35L56_DSP_VIRTUAL1_MBOX_1,
-					  CS35L56_DSP_MBOX_CMD_PLAY_ASP_ALT);
-			cs35l56_reg_update(dev, CS35L56_BLOCK_ENABLES2, CS35L56_ASP_EN,
-					   CS35L56_ASP_EN);
-		} else {
-			LOG_ERR("PDE23 State: %x", val);
-		}
 	} else {
 		LOG_DBG("RAM Firmware not booted, failed to start output");
 	}
