@@ -49,6 +49,14 @@
 				reg = <0x3>;
 				mclk-frequency = <13000000>;
 			};
+
+			test_i2c_cs35l45: cs35l45@4 {
+				compatible = "cirrus,cs35l45";
+				status = "okay;
+				reg = <0x4>;
+				reset-gpios = <&test_gpio 0 0>;
+				int-gpios = <&test_gpio 1 0>;
+			};
 		};
 	};
 };
