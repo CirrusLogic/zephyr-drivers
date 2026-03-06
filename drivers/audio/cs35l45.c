@@ -59,6 +59,11 @@ LOG_MODULE_REGISTER(cirrus_cs35l45, CONFIG_AUDIO_CODEC_LOG_LEVEL);
 #define CS35L45_ASP_ENABLES1 0x00004800
 #define CS35L45_ASP_RX2_EN   BIT(17)
 #define CS35L45_ASP_RX1_EN   BIT(16)
+#define CS35L45_ASP_TX5_EN   BIT(4)
+#define CS35L45_ASP_TX4_EN   BIT(3)
+#define CS35L45_ASP_TX3_EN   BIT(2)
+#define CS35L45_ASP_TX2_EN   BIT(1)
+#define CS35L45_ASP_TX1_EN   BIT(0)
 
 #define CS35L45_ASP_CONTROL2      0x00004808
 #define CS35L45_ASP_WIDTH_RX_MASK GENMASK(31, 24)
@@ -364,6 +369,51 @@ static int cs35l45_set_property(const struct device *dev, audio_property_t prope
 	default:
 		return -ENOTSUP;
 	}
+}
+
+int cs35l45_set_tx_data_source(const struct device *dev, enum cs35l45_data_source data_source, uint32_t tx_idx)
+{
+	switch (tx_idx) {
+	case 1:
+		return cs35l45_write(dev, CS35L45_ASPTX1_INPUT, (uint32_t)data_source);
+	case 2:
+		return cs35l45_write(dev, CS35L45_ASPTX2_INPUT, (uint32_t)data_source);
+	case 3:
+		return cs35l45_write(dev, CS35L45_ASPTX3_INPUT, (uint32_t)data_source);
+	case 4:
+		return cs35l45_write(dev, CS35L45_ASPTX4_INPUT, (uint32_t)data_source);
+	case 5:
+		return cs35l45_write(dev, CS35L45_ASPTX5_INPUT, (uint32_t)data_source);
+	default:
+		return -EINVAL;
+	}
+}
+
+static int cs35l45_route_input(const struct device *dev, audio_channel_t channel, uint32_t input)
+{
+	uint32_t val;
+
+	switch (input) {
+	case 1:
+		val = CS35L45_ASP_TX1_EN;
+		break;
+	case 2:
+		val = CS35L45_ASP_TX2_EN;
+		break;
+	case 3:
+		val = CS35L45_ASP_TX3_EN;
+		break;
+	case 4:
+		val = CS35L45_ASP_TX4_EN;
+		break;
+	case 5:
+		val = CS35L45_ASP_TX5_EN;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return cs35l45_update_bits(dev, CS35L45_ASP_ENABLES1, val, val);
 }
 
 static int cs35l45_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
@@ -1131,6 +1181,7 @@ static const struct audio_codec_api cs35l45_driver_api = {
 	.set_property = cs35l45_set_property,
 	.apply_properties = cs35l45_apply_properties,
 	.route_output = cs35l45_route_output,
+	.route_input = cs35l45_route_input,
 };
 
 #define AUDIO_CODEC_CS35L45_DATA(inst)                                                             \
