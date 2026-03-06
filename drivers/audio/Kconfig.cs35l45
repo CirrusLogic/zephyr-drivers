@@ -16,3 +16,13 @@ config AUDIO_CODEC_CS35L45_I2C
 	select AUDIO_CODEC_CS35L45
 	help
 	  Enable driver for CS35L45 I2C-based amp.
+
+if AUDIO_CODEC_CS35L45
+
+config AUDIO_CODEC_CS35L45_SHELL
+	bool "Custom shell for Cirrus Logic CS35L45"
+	depends on SHELL
+	help
+	  Enable CS35L45 custom shell
+
+endif # AUDIO_CODEC_CS35L45
