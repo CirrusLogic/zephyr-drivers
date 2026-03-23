@@ -88,6 +88,15 @@ LOG_MODULE_REGISTER(cirrus_cs35l45, CONFIG_AUDIO_CODEC_LOG_LEVEL);
 #define CS35L45_ASP_WL_MIN        12
 #define CS35L45_ASP_WL_MAX        24
 
+#define CS35L45_DSP1RX1_INPUT 0x00004C40
+#define CS35L45_DSP1RX2_INPUT 0x00004C44
+#define CS35L45_DSP1RX3_INPUT 0x00004C48
+#define CS35L45_DSP1RX4_INPUT 0x00004C4C
+#define CS35L45_DSP1RX5_INPUT 0x00004C50
+#define CS35L45_DSP1RX6_INPUT 0x00004C54
+#define CS35L45_DSP1RX7_INPUT 0x00004C58
+#define CS35L45_DSP1RX8_INPUT 0x00004C5C
+
 #define CS35L45_DACPCM1_INPUT         0x00004C00
 #define CS35L45_DACPCM1_SRC_MASK      GENMASK(6, 0)
 #define CS35L45_DACPCM1_SRC_ZERO_FILL 0x0
@@ -148,6 +157,13 @@ LOG_MODULE_REGISTER(cirrus_cs35l45, CONFIG_AUDIO_CODEC_LOG_LEVEL);
 #define CS35L45_IRQ1_MASK_7  0x0000E128
 #define CS35L45_IRQ1_MASK_14 0x0000E144
 #define CS35L45_IRQ1_MASK_18 0x0000E154
+
+#define CS35L45_DSP_MBOX_2       0x00011004
+#define CS35L45_DSP_VIRT1_MBOX_1 0x00011020
+#define CS35L45_DSP_VIRT2_MBOX_3 0x00011048
+#define CS35L45_MBOX3_DATA_MASK 0xFFFFFF00
+#define CS35L45_MBOX3_CMD_MASK 0xFF
+#define CS35L45_DSP_VIRT2_MBOX_4 0x0001104C
 
 #define CS35L45_T_DEFAULT_DELAY       K_MSEC(1)
 #define CS35L45_T_RLPW_US             K_USEC(1000)
@@ -217,6 +233,15 @@ static const struct reg_sequence cs35l45_irq_clear_seq[] = {
 	{CS35L45_IRQ1_EINT_18, 0xFFFFFFFFU},
 };
 
+static const struct reg_sequence cs35l45_dsp_routing[] = {
+	{CS35L45_DSP1RX3_INPUT, DATA_SOURCE_VMON},
+	{CS35L45_DSP1RX4_INPUT, DATA_SOURCE_IMON},
+	{CS35L45_DSP1RX5_INPUT, DATA_SOURCE_VDD_BATTMON},
+	{CS35L45_DSP1RX6_INPUT, DATA_SOURCE_VDD_BSTMON},
+	{CS35L45_DSP1RX7_INPUT, DATA_SOURCE_CLASSH_TGT},
+	{CS35L45_DSP1RX8_INPUT, DATA_SOURCE_VDD_BATTMON},
+};
+
 enum cs35l45_irq {
 	CS35L45_INT1,
 	CS35L45_INT2,
@@ -227,6 +252,11 @@ enum cs35l45_irq {
 	CS35L45_INT8,
 	CS35L45_INT14,
 	CS35L45_INT18,
+};
+
+enum mbox3_events {
+	EVENT_SPEAKER_STATUS = 0x66,
+	EVENT_BOOT_DONE = 0x67,
 };
 
 static bool cs35l45_is_ready(const struct device *const dev)
@@ -289,6 +319,73 @@ static int cs35l45_update_bits(const struct device *const dev, const uint32_t ad
 	tmp |= val & mask;
 
 	return cs35l45_write(dev, addr, tmp);
+}
+
+static bool cs35l45_check_cspl_mbox_sts(const enum cs35l45_cspl_mboxcmd cmd,
+					enum cs35l45_cspl_mboxstate sts)
+{
+	switch (cmd) {
+	case CSPL_MBOX_CMD_NONE:
+	case CSPL_MBOX_CMD_UNKNOWN_CMD:
+		return true;
+	case CSPL_MBOX_CMD_PAUSE:
+	case CSPL_MBOX_CMD_OUT_OF_HIBERNATE:
+		return (sts == CSPL_MBOX_STS_PAUSED);
+	case CSPL_MBOX_CMD_RESUME:
+		return (sts == CSPL_MBOX_STS_RUNNING);
+	case CSPL_MBOX_CMD_REINIT:
+		return (sts == CSPL_MBOX_STS_RUNNING);
+	case CSPL_MBOX_CMD_STOP_PRE_REINIT:
+		return (sts == CSPL_MBOX_STS_RDY_FOR_REINIT);
+	case CSPL_MBOX_CMD_HIBERNATE:
+		return (sts == CSPL_MBOX_STS_HIBERNATE);
+	default:
+		return false;
+	}
+}
+
+static int cs35l45_set_cspl_mbox_cmd(const struct device *dev, const enum cs35l45_cspl_mboxcmd cmd)
+{
+	const struct cs35l45_config *const config = dev->config;
+	struct cs35l45_data *const data = dev->data;
+	uint32_t sts = 0, i;
+	int ret;
+
+	if (!data->dsp_booted) {
+		LOG_INST_ERR(config->log, "DSP not running");
+		return -EPERM;
+	}
+
+	ret = cs35l45_write(dev, CS35L45_DSP_VIRT1_MBOX_1, cmd);
+	if (ret < 0) {
+		if (cmd != CSPL_MBOX_CMD_OUT_OF_HIBERNATE) {
+			LOG_INST_ERR(config->log, "Failed to write MBOX: %d", ret);
+		}
+		return ret;
+	}
+
+	for (i = 0; i < 5; i++) {
+		k_sleep(K_USEC(1000));
+
+		ret = cs35l45_read(dev, CS35L45_DSP_MBOX_2, &sts);
+		if (ret < 0) {
+			LOG_INST_ERR(config->log, "Failed to read MBOX STS: %d", ret);
+			continue;
+		}
+
+		if (!cs35l45_check_cspl_mbox_sts(cmd, sts)) {
+			LOG_INST_DBG(config->log, "[%u] cmd %u returned invalid sts %u", i, cmd,
+				     sts);
+		} else {
+			return 0;
+		}
+	}
+
+	if (cmd != CSPL_MBOX_CMD_OUT_OF_HIBERNATE) {
+		LOG_INST_ERR(config->log, "Failed to set mailbox cmd %u (status %u)", cmd, sts);
+	}
+
+	return -ENOMSG;
 }
 
 static int cs35l45_apply_properties(const struct device *dev)
@@ -416,8 +513,43 @@ static int cs35l45_route_input(const struct device *dev, audio_channel_t channel
 	return cs35l45_update_bits(dev, CS35L45_ASP_ENABLES1, val, val);
 }
 
+static int cs35l45_route_dsp(const struct device *dev, uint32_t output)
+{
+	uint32_t val;
+	int ret;
+
+	switch (output) {
+	case 1:
+		val = (uint32_t)DATA_SOURCE_ASP_RX1;
+	case 2:
+		val = (uint32_t)DATA_SOURCE_ASP_RX2;
+	default:
+		return -EINVAL;
+	}
+
+	ret = cs35l45_write(dev, CS35L45_DSP1RX1_INPUT, val);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_write(dev, CS35L45_DSP1RX2_INPUT, val);
+	if (ret < 0) {
+		return ret;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(cs35l45_dsp_routing); i++) {
+		ret = cs35l45_write(dev, cs35l45_dsp_routing[i].reg, cs35l45_dsp_routing[i].def);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
 static int cs35l45_route_output(const struct device *dev, audio_channel_t channel, uint32_t output)
 {
+	struct cs35l45_data *const data = dev->data;
 	uint32_t val;
 	int ret;
 
@@ -442,13 +574,31 @@ static int cs35l45_route_output(const struct device *dev, audio_channel_t channe
 		return ret;
 	}
 
-	if (output == 1) {
-		val = CS35L45_DACPCM1_SRC_ASP_RX1;
+	if (!data->dsp_booted) {
+		if (output == 1) {
+			val = CS35L45_DACPCM1_SRC_ASP_RX1;
+		} else {
+			val = CS35L45_DACPCM1_SRC_ASP_RX2;
+		}
 	} else {
-		val = CS35L45_DACPCM1_SRC_ASP_RX2;
+		ret = cs35l45_route_dsp(dev, output);
+		if (ret < 0) {
+			return ret;
+		}
+
+		val = CS35L45_DACPCM1_SRC_DSP_TX1;
 	}
 
 	return cs35l45_write(dev, CS35L45_DACPCM1_INPUT, val);
+}
+
+static int cs35l45_dsp_audio_ev(const struct device *dev, const bool event)
+{
+	if (event) {
+		return cs35l45_set_cspl_mbox_cmd(dev, CSPL_MBOX_CMD_RESUME);
+	} else {
+		return cs35l45_set_cspl_mbox_cmd(dev, CSPL_MBOX_CMD_PAUSE);
+	}
 }
 
 static int cs35l45_global_en_event(const struct device *dev, const bool enable)
@@ -475,12 +625,24 @@ static int cs35l45_global_en_event(const struct device *dev, const bool enable)
 
 static void cs35l45_stop_output(const struct device *dev)
 {
+	struct cs35l45_data *const data = dev->data;
+
 	(void)cs35l45_global_en_event(dev, false);
+
+	if (data->dsp_booted) {
+		(void)cs35l45_dsp_audio_ev(dev, false);
+	}
 }
 
 static void cs35l45_start_output(const struct device *dev)
 {
+	struct cs35l45_data *const data = dev->data;
+
 	(void)cs35l45_global_en_event(dev, true);
+
+	if (data->dsp_booted) {
+		(void)cs35l45_dsp_audio_ev(dev, true);
+	}
 }
 
 static int cs35l45_get_clk_freq_id(const uint32_t freq)
@@ -720,10 +882,55 @@ static void cs35l45_error_callback(const struct device *const dev, const uint32_
 	}
 }
 
+static int cs35l45_process_mailbox3(const struct device *const dev, uint8_t cmd, uint32_t data)
+{
+	const struct cs35l45_config *const config = dev->config;
+	static char *speaker_status = "Unknown";
+
+	switch (cmd) {
+	case EVENT_SPEAKER_STATUS:
+		switch (data) {
+		case 1:
+			speaker_status = "All Clear";
+			break;
+		case 2:
+			speaker_status = "Open Circuit";
+			break;
+		case 4:
+			speaker_status = "Short Circuit";
+			break;
+		}
+
+		LOG_INST_INF(config->log, "MBOX event (SPEAKER_STATUS): %s", speaker_status);
+		break;
+	case EVENT_BOOT_DONE:
+		LOG_INST_DBG(config->log, "MBOX event (BOOT_DONE)");
+		break;
+	default:
+		LOG_INST_ERR(config->log, "MBOX event not supported %u", cmd);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 static int cs35l45_process_mailbox(const struct device *const dev)
 {
-	/* To-do*/
-	return 0;
+	const struct cs35l45_config *const config = dev->config;
+	uint32_t mbox_val;
+	int ret;
+
+	ret = cs35l45_read(dev, CS35L45_DSP_VIRT2_MBOX_3, &mbox_val);
+	if ((ret == 0) && (mbox_val)) {
+		(void)cs35l45_process_mailbox3(dev, (mbox_val & CS35L45_MBOX3_CMD_MASK), FIELD_GET(CS35L45_MBOX3_DATA_MASK, mbox_val));
+	}
+
+	ret = cs35l45_read(dev, CS35L45_DSP_VIRT2_MBOX_4, &mbox_val);
+	if ((ret == 0) && (mbox_val != 0)) {
+		LOG_INST_ERR(config->log, "Spurious DSP MBOX4 IRQ");
+	}
+
+	return ret;
 }
 
 static int cs35l45_process_interrupts(const struct device *const dev,

@@ -138,6 +138,8 @@ struct cs35l45_data {
 	struct k_work_delayable interrupt_worker;
 	/**< Application-provided callback to recover from fatal hardware errors */
 	void (*error_callback)(const struct device *const dev, const uint32_t errors);
+	/**< Flag to indicate the DSP has been booted */
+	bool dsp_booted;
 };
 
 enum cs35l45_data_source {
@@ -148,6 +150,7 @@ enum cs35l45_data_source {
 	DATA_SOURCE_VMON = 0x18,
 	DATA_SOURCE_IMON = 0x19,
 	DATA_SOURCE_ERR_VOL = 0x20,
+	DATA_SOURCE_CLASSH_TGT = 0x21,
 	DATA_SOURCE_VDD_BATTMON = 0x28,
 	DATA_SOURCE_VDD_BSTMON = 0x29,
 	DATA_SOURCE_DSP_TX_CH1 = 0x32,
@@ -163,6 +166,25 @@ enum cs35l45_data_source {
 };
 
 int cs35l45_set_tx_data_source(const struct device *dev, enum cs35l45_data_source data_source, uint32_t tx_idx);
+
+enum cs35l45_cspl_mboxstate {
+	CSPL_MBOX_STS_RUNNING = 0,
+	CSPL_MBOX_STS_PAUSED = 1,
+	CSPL_MBOX_STS_RDY_FOR_REINIT = 2,
+	CSPL_MBOX_STS_HIBERNATE = 3,
+};
+
+enum cs35l45_cspl_mboxcmd {
+	CSPL_MBOX_CMD_NONE = 0,
+	CSPL_MBOX_CMD_PAUSE = 1,
+	CSPL_MBOX_CMD_RESUME = 2,
+	CSPL_MBOX_CMD_REINIT = 3,
+	CSPL_MBOX_CMD_STOP_PRE_REINIT = 4,
+	CSPL_MBOX_CMD_HIBERNATE = 5,
+	CSPL_MBOX_CMD_OUT_OF_HIBERNATE = 6,
+	CSPL_MBOX_CMD_UNKNOWN_CMD = -1,
+	CSPL_MBOX_CMD_INVALID_SEQUENCE = -2,
+};
 
 /** @} */
 
