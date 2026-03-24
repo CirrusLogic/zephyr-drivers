@@ -11,6 +11,7 @@
 
 #define CODEC_SET_TX_SOURCE_HELP                                                                   \
 	SHELL_HELP("Set transmitter output source", "<device> <tx_idx> <data source>")
+#define CODEC_SET_DSP_BOOTED_HELP SHELL_HELP("Set DSP booted flag", "<device> <booted>")
 
 static const char *const data_source_name[] = {
 	[DATA_SOURCE_ZERO_FILL] = "zero_fill",
@@ -41,11 +42,13 @@ struct args_index {
 	uint8_t tx_idx;
 	uint8_t channel;
 	uint8_t value;
+	uint8_t dsp_booted;
 };
 
 static const struct args_index args_indx = {
 	.device = 1,
 	.tx_idx = 2,
+	.dsp_booted = 2,
 	.data_source = 3,
 };
 
@@ -68,6 +71,28 @@ static int parse_named_int(const char *name, const char *const keystack[], size_
 	}
 
 	return -ENOTSUP;
+}
+
+static int cmd_set_dsp_booted(const struct shell *sh, size_t argc, char *argv[])
+{
+	const struct device *dev;
+	bool dsp_booted;
+	int err;
+
+	dev = shell_device_get_binding(argv[args_indx.device]);
+	if (!dev) {
+		shell_error(sh, "CS35L45 device not found");
+		return -ENODEV;
+	}
+
+	dsp_booted = shell_strtobool(argv[args_indx.dsp_booted], 0, &err);
+	if (err < 0) {
+		return err;
+	}
+
+	cs35l45_dsp_boot_set(dev, dsp_booted);
+
+	return 0;
 }
 
 static int cmd_set_tx_source(const struct shell *sh, size_t argc, char *argv[])
@@ -118,6 +143,8 @@ SHELL_DYNAMIC_CMD_CREATE(dsub_device_name, device_name_get);
 SHELL_STATIC_SUBCMD_SET_CREATE(sub_codec,
 	SHELL_CMD_ARG(set_tx_source, &dsub_device_name, CODEC_SET_TX_SOURCE_HELP, cmd_set_tx_source,
 			4, 0),
+	SHELL_CMD_ARG(set_dsp_booted, &dsub_device_name, CODEC_SET_DSP_BOOTED_HELP, cmd_set_dsp_booted,
+			3, 0),
 	SHELL_SUBCMD_SET_END
 );
 /* clang-format on */

@@ -166,6 +166,7 @@ enum cs35l45_data_source {
 };
 
 int cs35l45_set_tx_data_source(const struct device *dev, enum cs35l45_data_source data_source, uint32_t tx_idx);
+void cs35l45_dsp_boot_set(const struct device *dev, bool booted);
 
 enum cs35l45_cspl_mboxstate {
 	CSPL_MBOX_STS_RUNNING = 0,

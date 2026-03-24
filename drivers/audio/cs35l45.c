@@ -321,6 +321,13 @@ static int cs35l45_update_bits(const struct device *const dev, const uint32_t ad
 	return cs35l45_write(dev, addr, tmp);
 }
 
+void cs35l45_dsp_boot_set(const struct device *dev, bool booted)
+{
+	struct cs35l45_data *const data = dev->data;
+
+	data->dsp_booted = booted;
+}
+
 static bool cs35l45_check_cspl_mbox_sts(const enum cs35l45_cspl_mboxcmd cmd,
 					enum cs35l45_cspl_mboxstate sts)
 {
