@@ -106,6 +106,34 @@ union cs35l45_bus {
 #endif /* CONFIG_AUDIO_CODEC_CS35L45_SPI */
 };
 
+enum cs35l45_data_source {
+	DATA_SOURCE_ZERO_FILL = 0x0,
+	DATA_SOURCE_DIAG_GEN = 0x4,
+	DATA_SOURCE_ASP_RX1 = 0x8,
+	DATA_SOURCE_ASP_RX2 = 0x9,
+	DATA_SOURCE_VMON = 0x18,
+	DATA_SOURCE_IMON = 0x19,
+	DATA_SOURCE_ERR_VOL = 0x20,
+	DATA_SOURCE_CLASSH_TGT = 0x21,
+	DATA_SOURCE_VDD_BATTMON = 0x28,
+	DATA_SOURCE_VDD_BSTMON = 0x29,
+	DATA_SOURCE_DSP_TX_CH1 = 0x32,
+	DATA_SOURCE_DSP_TX_CH2 = 0x33,
+	DATA_SOURCE_DSP_TX_CH3 = 0x34,
+	DATA_SOURCE_DSP_TX_CH4 = 0x35,
+	DATA_SOURCE_DSP_TX_CH5 = 0x36,
+	DATA_SOURCE_DSP_TX_CH6 = 0x37,
+	DATA_SOURCE_DSP_TX_CH7 = 0x38,
+	DATA_SOURCE_DSP_TX_CH8 = 0x39,
+	DATA_SOURCE_TEMPMON = 0x3A,
+	DATA_SOURCE_IL_TARGET = 0x48,
+};
+
+struct cs35l45_asp_channel {
+	bool enable;
+	enum cs35l45_data_source data_source;
+};
+
 struct cs35l45_config {
 	/**< Pointer to CS35L45 device instance */
 	const struct device *const dev;
@@ -140,29 +168,12 @@ struct cs35l45_data {
 	void (*error_callback)(const struct device *const dev, const uint32_t errors);
 	/**< Flag to indicate the DSP has been booted */
 	bool dsp_booted;
-};
-
-enum cs35l45_data_source {
-	DATA_SOURCE_ZERO_FILL = 0x0,
-	DATA_SOURCE_DIAG_GEN = 0x4,
-	DATA_SOURCE_ASP_RX1 = 0x8,
-	DATA_SOURCE_ASP_RX2 = 0x9,
-	DATA_SOURCE_VMON = 0x18,
-	DATA_SOURCE_IMON = 0x19,
-	DATA_SOURCE_ERR_VOL = 0x20,
-	DATA_SOURCE_CLASSH_TGT = 0x21,
-	DATA_SOURCE_VDD_BATTMON = 0x28,
-	DATA_SOURCE_VDD_BSTMON = 0x29,
-	DATA_SOURCE_DSP_TX_CH1 = 0x32,
-	DATA_SOURCE_DSP_TX_CH2 = 0x33,
-	DATA_SOURCE_DSP_TX_CH3 = 0x34,
-	DATA_SOURCE_DSP_TX_CH4 = 0x35,
-	DATA_SOURCE_DSP_TX_CH5 = 0x36,
-	DATA_SOURCE_DSP_TX_CH6 = 0x37,
-	DATA_SOURCE_DSP_TX_CH7 = 0x38,
-	DATA_SOURCE_DSP_TX_CH8 = 0x39,
-	DATA_SOURCE_TEMPMON = 0x3A,
-	DATA_SOURCE_IL_TARGET = 0x48,
+	/**< ASP RX channel setting */
+	uint8_t output;
+	/**< ASP TX channel setting */
+	struct cs35l45_asp_channel input[5];
+	/**< ASP Configuration */
+	struct audio_codec_cfg cfg;
 };
 
 int cs35l45_set_tx_data_source(const struct device *dev, enum cs35l45_data_source data_source, uint32_t tx_idx);

@@ -11,6 +11,8 @@
 
 #include <zephyr/devicetree.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/pm/device.h>
 #include <zephyr/audio/codec.h>
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/regulator.h>
@@ -40,6 +42,15 @@ LOG_MODULE_REGISTER(cirrus_cs35l45, CONFIG_AUDIO_CODEC_LOG_LEVEL);
 #define CS35L45_INTB_GPIO2_MCLK_REF 0x00002434
 #define CS35L45_GP2_CTRL            GENMASK(22, 20)
 #define CS35L45_OPEN_DRAIN_INT      0x2
+
+#define CS35L45_WAKESRC_CTL     0x00002904
+#define CS35L45_WKSRC_EN_MASK   GENMASK(12, 8)
+#define CS35L45_UPDT_WKCTL_MASK BIT(15)
+#define CS35L45_WKSRC_I2C       BIT(4)
+#define CS35L45_WKSRC_SPI       BIT(3)
+#define CS35L45_WKI2C_CTL       0x00002908
+#define CS35L45_WKI2C_ADDR_MASK GENMASK(6, 0)
+#define CS35L45_UPDT_WKI2C_MASK BIT(15)
 
 #define CS35L45_REFCLK_INPUT         0x00002C04
 #define CS35L45_PLL_OPEN_LOOP_MASK   BIT(11)
@@ -154,6 +165,8 @@ LOG_MODULE_REGISTER(cirrus_cs35l45, CONFIG_AUDIO_CODEC_LOG_LEVEL);
 #define CS35L45_GLOBAL_ERROR_EINT1         BIT(15)
 
 #define CS35L45_IRQ1_MASK_1  0x0000E110
+#define CS35L45_IRQ1_MASK_2         0x0000E114
+#define CS35L45_DSP_VIRT2_MBOX_MASK BIT(21)
 #define CS35L45_IRQ1_MASK_7  0x0000E128
 #define CS35L45_IRQ1_MASK_14 0x0000E144
 #define CS35L45_IRQ1_MASK_18 0x0000E154
@@ -402,11 +415,23 @@ static int cs35l45_apply_properties(const struct device *dev)
 
 static int cs35L45_set_volume(const struct device *dev, audio_property_value_t val)
 {
+	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	if (!IN_RANGE(val.vol, CS35L45_AMP_VOL_PCM_MIN, CS35L45_AMP_VOL_PCM_MAX)) {
 		return -EINVAL;
 	}
 
-	return cs35l45_update_bits(dev, CS35L45_AMP_PCM_CONTROL, CS35L45_AMP_VOL_PCM_MASK, val.vol);
+	ret = cs35l45_update_bits(dev, CS35L45_AMP_PCM_CONTROL, CS35L45_AMP_VOL_PCM_MASK, val.vol);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static int cs35L45_set_mute(const struct device *dev, audio_property_value_t val)
@@ -465,37 +490,78 @@ static int cs35L45_set_mute(const struct device *dev, audio_property_value_t val
 static int cs35l45_set_property(const struct device *dev, audio_property_t property,
 				audio_channel_t channel, audio_property_value_t val)
 {
+	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	switch (property) {
 	case AUDIO_PROPERTY_OUTPUT_MUTE:
-		return cs35L45_set_mute(dev, val);
+		ret = cs35L45_set_mute(dev, val);
+		break;
 	case AUDIO_PROPERTY_OUTPUT_VOLUME:
-		return cs35L45_set_volume(dev, val);
+		ret = cs35L45_set_volume(dev, val);
+		break;
 	default:
 		return -ENOTSUP;
 	}
+	if (ret < 0) {
+		return ret;
+	}
+
+	return pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 int cs35l45_set_tx_data_source(const struct device *dev, enum cs35l45_data_source data_source, uint32_t tx_idx)
 {
+	struct cs35l45_data *const data = dev->data;
+	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	switch (tx_idx) {
 	case 1:
-		return cs35l45_write(dev, CS35L45_ASPTX1_INPUT, (uint32_t)data_source);
+		ret = cs35l45_write(dev, CS35L45_ASPTX1_INPUT, (uint32_t)data_source);
+		break;
 	case 2:
-		return cs35l45_write(dev, CS35L45_ASPTX2_INPUT, (uint32_t)data_source);
+		ret = cs35l45_write(dev, CS35L45_ASPTX2_INPUT, (uint32_t)data_source);
+		break;
 	case 3:
-		return cs35l45_write(dev, CS35L45_ASPTX3_INPUT, (uint32_t)data_source);
+		ret = cs35l45_write(dev, CS35L45_ASPTX3_INPUT, (uint32_t)data_source);
+		break;
 	case 4:
-		return cs35l45_write(dev, CS35L45_ASPTX4_INPUT, (uint32_t)data_source);
+		ret = cs35l45_write(dev, CS35L45_ASPTX4_INPUT, (uint32_t)data_source);
+		break;
 	case 5:
-		return cs35l45_write(dev, CS35L45_ASPTX5_INPUT, (uint32_t)data_source);
+		ret = cs35l45_write(dev, CS35L45_ASPTX5_INPUT, (uint32_t)data_source);
+		break;
 	default:
 		return -EINVAL;
 	}
+	if (ret < 0) {
+		return ret;
+	}
+
+	data->input[tx_idx - 1].data_source = data_source;
+
+	return pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static int cs35l45_route_input(const struct device *dev, audio_channel_t channel, uint32_t input)
 {
+	struct cs35l45_data *const data = dev->data;
 	uint32_t val;
+	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
 
 	switch (input) {
 	case 1:
@@ -517,7 +583,14 @@ static int cs35l45_route_input(const struct device *dev, audio_channel_t channel
 		return -EINVAL;
 	}
 
-	return cs35l45_update_bits(dev, CS35L45_ASP_ENABLES1, val, val);
+	data->input[input - 1].enable = true;
+
+	ret = cs35l45_update_bits(dev, CS35L45_ASP_ENABLES1, val, val);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static int cs35l45_route_dsp(const struct device *dev, uint32_t output)
@@ -560,6 +633,11 @@ static int cs35l45_route_output(const struct device *dev, audio_channel_t channe
 	uint32_t val;
 	int ret;
 
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
 	switch (output) {
 	case 1:
 		val = CS35L45_ASP_RX1_EN;
@@ -570,6 +648,8 @@ static int cs35l45_route_output(const struct device *dev, audio_channel_t channe
 	default:
 		return -EINVAL;
 	}
+
+	data->output = (uint8_t)output;
 
 	ret = cs35l45_update_bits(dev, CS35L45_ASP_ENABLES1, val, val);
 	if (ret < 0) {
@@ -596,7 +676,12 @@ static int cs35l45_route_output(const struct device *dev, audio_channel_t channe
 		val = CS35L45_DACPCM1_SRC_DSP_TX1;
 	}
 
-	return cs35l45_write(dev, CS35L45_DACPCM1_INPUT, val);
+	ret = cs35l45_write(dev, CS35L45_DACPCM1_INPUT, val);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static int cs35l45_dsp_audio_ev(const struct device *dev, const bool event)
@@ -639,11 +724,15 @@ static void cs35l45_stop_output(const struct device *dev)
 	if (data->dsp_booted) {
 		(void)cs35l45_dsp_audio_ev(dev, false);
 	}
+
+	(void)pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static void cs35l45_start_output(const struct device *dev)
 {
 	struct cs35l45_data *const data = dev->data;
+
+	(void)pm_device_runtime_get(dev);
 
 	(void)cs35l45_global_en_event(dev, true);
 
@@ -846,7 +935,15 @@ static int cs35l45_configure_asp_word(const struct device *dev, struct audio_cod
 
 static int cs35l45_configure(const struct device *dev, struct audio_codec_cfg *cfg)
 {
+	struct cs35l45_data *const data = dev->data;
 	int ret;
+
+	ret = pm_device_runtime_get(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	data->cfg = *cfg;
 
 	ret = cs35l45_set_frame_clock(dev, cfg->dai_cfg.i2s.frame_clk_freq);
 	if (ret < 0) {
@@ -863,7 +960,7 @@ static int cs35l45_configure(const struct device *dev, struct audio_codec_cfg *c
 		return ret;
 	}
 
-	return 0;
+	return pm_device_runtime_put_async(dev, K_NO_WAIT);
 }
 
 static int cs35l45_apply_patch(const struct device *dev)
@@ -1385,7 +1482,235 @@ static int cs35l45_init(const struct device *dev)
 		}
 	}
 
+	ret = pm_device_runtime_enable(dev);
+	if ((ret < 0) && (ret != -ENOSYS)) {
+		return ret;
+	}
+
 	return 0;
+}
+
+static int cs35l45_global_error_release(const struct device *dev)
+{
+	int ret;
+
+	ret = cs35l45_update_bits(dev, CS35L45_ERROR_RELEASE, CS35L45_GLOBAL_ERR_RLS, 0);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_update_bits(dev, CS35L45_ERROR_RELEASE, CS35L45_GLOBAL_ERR_RLS,
+				  CS35L45_GLOBAL_ERR_RLS);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return cs35l45_update_bits(dev, CS35L45_ERROR_RELEASE, CS35L45_GLOBAL_ERR_RLS, 0);
+}
+
+static int cs35l45_restore_asp_context(const struct device *dev)
+{
+	struct cs35l45_data *const data = dev->data;
+	int ret;
+
+	ret = cs35l45_route_output(dev, AUDIO_CHANNEL_ALL, (uint32_t)data->output);
+	if (ret < 0) {
+		return ret;
+	}
+
+	for (int i = 0; i < ARRAY_SIZE(data->input); i++) {
+		ret = cs35l45_set_tx_data_source(dev, data->input[i].data_source, i + 1);
+		if (ret < 0) {
+			return ret;
+		}
+
+		if (data->input[i].enable) {
+			ret = cs35l45_route_input(dev, AUDIO_CHANNEL_ALL, i + 1);
+			if (ret < 0) {
+				return ret;
+			}
+		}
+	}
+
+	ret = cs35l45_configure(dev, &data->cfg);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return 0;
+}
+
+static int cs35l45_restore_context(const struct device *dev)
+{
+	const struct cs35l45_config *config = dev->config;
+	int ret;
+
+	ret = cs35l45_hw_init(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	if (config->int_gpio.port != NULL) {
+		ret = cs35l45_irq_config(dev);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	return cs35l45_restore_asp_context(dev);
+}
+
+static int cs35l45_setup_hibernate(const struct device *dev)
+{
+	const struct cs35l45_config *config = dev->config;
+#if CONFIG_AUDIO_CODEC_CS35L45_I2C
+	uint32_t wksrc = FIELD_PREP(CS35L45_WKSRC_EN_MASK, CS35L45_WKSRC_I2C);
+	int ret;
+
+	ret = cs35l45_update_bits(dev, CS35L45_WAKESRC_CTL, CS35L45_WKSRC_EN_MASK, wksrc);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_update_bits(dev, CS35L45_WAKESRC_CTL, CS35L45_UPDT_WKCTL_MASK,
+				  CS35L45_UPDT_WKCTL_MASK);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_update_bits(dev, CS35L45_WKI2C_CTL, CS35L45_WKI2C_ADDR_MASK,
+				  (uint32_t)config->bus.i2c.addr);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_update_bits(dev, CS35L45_WKI2C_CTL, CS35L45_UPDT_WKI2C_MASK,
+				  CS35L45_UPDT_WKI2C_MASK);
+	if (ret < 0) {
+		return ret;
+	}
+
+#elif CONFIG_AUDIO_CODEC_CS35L45_SPI
+	uint32_t wksrc = FIELD_PREP(CS35L45_WKSRC_EN_MASK, CS35L45_WKSRC_SPI);
+	int ret;
+
+	ret = cs35l45_update_bits(dev, CS35L45_WAKESRC_CTL, CS35L45_WKSRC_EN_MASK, wksrc);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_update_bits(dev, CS35L45_WAKESRC_CTL, CS35L45_UPDT_WKCTL_MASK,
+				  CS35L45_UPDT_WKCTL_MASK);
+	if (ret < 0) {
+		return ret;
+	}
+#else
+	return -EINVAL;
+#endif
+
+	return 0;
+}
+
+static int cs35l45_exit_hibernate(const struct device *dev)
+{
+	const struct cs35l45_config *config = dev->config;
+	const int wake_retries = 20;
+	const int sleep_retries = 5;
+	int ret, i, j;
+
+	for (i = 0; i < sleep_retries; i++) {
+		LOG_INST_DBG(config->log, "Exit hibernate");
+
+		for (j = 0; j < wake_retries; j++) {
+			ret = cs35l45_set_cspl_mbox_cmd(dev, CSPL_MBOX_CMD_OUT_OF_HIBERNATE);
+			if (ret == 0) {
+				ret = cs35l45_update_bits(dev, CS35L45_IRQ1_MASK_2,
+							  CS35L45_DSP_VIRT2_MBOX_MASK, 0);
+				if (ret < 0) {
+					return ret;
+				}
+
+				return 0;
+			}
+			k_sleep(K_USEC(100));
+		}
+
+		LOG_INST_ERR(config->log, "Wake failed, re-enter hibernate: %d", ret);
+
+		ret = cs35l45_setup_hibernate(dev);
+		if (ret < 0) {
+			return ret;
+		}
+	}
+
+	LOG_INST_ERR(config->log, "Timed out waking device");
+
+	return -ETIMEDOUT;
+}
+
+static int cs35l45_pm_action_resume(const struct device *dev)
+{
+	struct cs35l45_data *const data = dev->data;
+	int ret;
+
+	if (!data->dsp_booted) {
+		return 0;
+	}
+
+	ret = cs35l45_exit_hibernate(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_restore_context(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	return cs35l45_global_error_release(dev);
+}
+
+static int cs35l45_enter_hibernate(const struct device *dev)
+{
+	int ret;
+
+	ret = cs35l45_setup_hibernate(dev);
+	if (ret < 0) {
+		return ret;
+	}
+
+	ret = cs35l45_update_bits(dev, CS35L45_IRQ1_MASK_2, CS35L45_DSP_VIRT2_MBOX_MASK,
+				  CS35L45_DSP_VIRT2_MBOX_MASK);
+	if (ret < 0) {
+		return ret;
+	}
+
+	(void)cs35l45_write(dev, CS35L45_DSP_VIRT1_MBOX_1, CSPL_MBOX_CMD_HIBERNATE);
+
+	return 0;
+}
+
+static int cs35l45_pm_action_suspend(const struct device *dev)
+{
+	struct cs35l45_data *const data = dev->data;
+
+	if (!data->dsp_booted) {
+		return 0;
+	}
+
+	return cs35l45_enter_hibernate(dev);
+}
+
+static int cs35l45_pm_action(const struct device *dev, enum pm_device_action action)
+{
+	switch (action) {
+	case PM_DEVICE_ACTION_SUSPEND:
+		return cs35l45_pm_action_suspend(dev);
+	case PM_DEVICE_ACTION_RESUME:
+		return cs35l45_pm_action_resume(dev);
+	default:
+		return -ENOTSUP;
+	}
 }
 
 static const struct audio_codec_api cs35l45_driver_api = {
@@ -1417,8 +1742,9 @@ static const struct audio_codec_api cs35l45_driver_api = {
 		AUDIO_CODEC_CS35L45_BUS(inst)
 
 #define AUDIO_CODEC_CS35L45_INIT(inst)                                                             \
-	DEVICE_DT_INST_DEFINE(inst, cs35l45_init, NULL, &cs35l45_data_##inst,                      \
-			      &cs35l45_config_##inst, POST_KERNEL,                                 \
+	PM_DEVICE_DT_INST_DEFINE(inst, cs35l45_pm_action);                                         \
+	DEVICE_DT_INST_DEFINE(inst, cs35l45_init, PM_DEVICE_DT_INST_GET(inst),                     \
+			      &cs35l45_data_##inst, &cs35l45_config_##inst, POST_KERNEL,           \
 			      CONFIG_AUDIO_CODEC_INIT_PRIORITY, &cs35l45_driver_api);
 
 #define AUDIO_CODEC_CS35L45_DEFINE(inst)                                                           \
