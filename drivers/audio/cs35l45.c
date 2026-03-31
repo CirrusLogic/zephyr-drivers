@@ -1650,6 +1650,7 @@ static int cs35l45_exit_hibernate(const struct device *dev)
 
 static int cs35l45_pm_action_resume(const struct device *dev)
 {
+	const struct cs35l45_config *config = dev->config;
 	struct cs35l45_data *const data = dev->data;
 	int ret;
 
@@ -1664,6 +1665,12 @@ static int cs35l45_pm_action_resume(const struct device *dev)
 
 	ret = cs35l45_restore_context(dev);
 	if (ret < 0) {
+		return ret;
+	}
+
+	ret = gpio_add_callback_dt(&config->int_gpio, &data->interrupt_callback);
+	if (ret < 0) {
+		LOG_INST_DBG(config->log, "failed to add interrupt callback (%d)", ret);
 		return ret;
 	}
 
@@ -1692,10 +1699,18 @@ static int cs35l45_enter_hibernate(const struct device *dev)
 
 static int cs35l45_pm_action_suspend(const struct device *dev)
 {
+	const struct cs35l45_config *config = dev->config;
 	struct cs35l45_data *const data = dev->data;
+	int ret;
 
 	if (!data->dsp_booted) {
 		return 0;
+	}
+
+	ret = gpio_remove_callback_dt(&config->int_gpio, &data->interrupt_callback);
+	if (ret < 0) {
+		LOG_INST_DBG(config->log, "failed to remove interrupt callback (%d)", ret);
+		return ret;
 	}
 
 	return cs35l45_enter_hibernate(dev);
