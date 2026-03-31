@@ -52,6 +52,9 @@ LOG_MODULE_REGISTER(cirrus_cs35l45, CONFIG_AUDIO_CODEC_LOG_LEVEL);
 #define CS35L45_WKI2C_ADDR_MASK GENMASK(6, 0)
 #define CS35L45_UPDT_WKI2C_MASK BIT(15)
 
+#define CS35L45_PWRMGT_STS		0x0000290C
+#define CS35L45_MEM_RDY_STS		BIT(0)
+
 #define CS35L45_REFCLK_INPUT         0x00002C04
 #define CS35L45_PLL_OPEN_LOOP_MASK   BIT(11)
 #define CS35L45_PLL_REFCLK_FREQ_MASK GENMASK(10, 5)
@@ -334,13 +337,6 @@ static int cs35l45_update_bits(const struct device *const dev, const uint32_t ad
 	return cs35l45_write(dev, addr, tmp);
 }
 
-void cs35l45_dsp_boot_set(const struct device *dev, bool booted)
-{
-	struct cs35l45_data *const data = dev->data;
-
-	data->dsp_booted = booted;
-}
-
 static bool cs35l45_check_cspl_mbox_sts(const enum cs35l45_cspl_mboxcmd cmd,
 					enum cs35l45_cspl_mboxstate sts)
 {
@@ -371,7 +367,7 @@ static int cs35l45_set_cspl_mbox_cmd(const struct device *dev, const enum cs35l4
 	uint32_t sts = 0, i;
 	int ret;
 
-	if (!data->dsp_booted) {
+	if (!data->mem_rdy_sts) {
 		LOG_INST_ERR(config->log, "DSP not running");
 		return -EPERM;
 	}
@@ -661,7 +657,7 @@ static int cs35l45_route_output(const struct device *dev, audio_channel_t channe
 		return ret;
 	}
 
-	if (!data->dsp_booted) {
+	if (!data->mem_rdy_sts) {
 		if (output == 1) {
 			val = CS35L45_DACPCM1_SRC_ASP_RX1;
 		} else {
@@ -721,7 +717,7 @@ static void cs35l45_stop_output(const struct device *dev)
 
 	(void)cs35l45_global_en_event(dev, false);
 
-	if (data->dsp_booted) {
+	if (data->mem_rdy_sts) {
 		(void)cs35l45_dsp_audio_ev(dev, false);
 	}
 
@@ -736,7 +732,7 @@ static void cs35l45_start_output(const struct device *dev)
 
 	(void)cs35l45_global_en_event(dev, true);
 
-	if (data->dsp_booted) {
+	if (data->mem_rdy_sts) {
 		(void)cs35l45_dsp_audio_ev(dev, true);
 	}
 }
@@ -1652,15 +1648,23 @@ static int cs35l45_pm_action_resume(const struct device *dev)
 {
 	const struct cs35l45_config *config = dev->config;
 	struct cs35l45_data *const data = dev->data;
+	uint32_t val;
 	int ret;
 
-	if (!data->dsp_booted) {
-		return 0;
-	}
-
-	ret = cs35l45_exit_hibernate(dev);
+	ret = cs35l45_read(dev, CS35L45_PWRMGT_STS, &val);
 	if (ret < 0) {
 		return ret;
+	}
+
+	if ((val & CS35L45_MEM_RDY_STS) != 0U) {
+		data->mem_rdy_sts = true;
+
+		ret = cs35l45_exit_hibernate(dev);
+		if (ret < 0) {
+			return ret;
+		}
+	} else {
+		data->mem_rdy_sts = false;
 	}
 
 	ret = cs35l45_restore_context(dev);
@@ -1703,7 +1707,7 @@ static int cs35l45_pm_action_suspend(const struct device *dev)
 	struct cs35l45_data *const data = dev->data;
 	int ret;
 
-	if (!data->dsp_booted) {
+	if (!data->mem_rdy_sts) {
 		return 0;
 	}
 

@@ -166,8 +166,8 @@ struct cs35l45_data {
 	struct k_work_delayable interrupt_worker;
 	/**< Application-provided callback to recover from fatal hardware errors */
 	void (*error_callback)(const struct device *const dev, const uint32_t errors);
-	/**< Flag to indicate the DSP has been booted */
-	bool dsp_booted;
+	/**< Flag to indicate the DSP RAM has been initialized */
+	bool mem_rdy_sts;
 	/**< ASP RX channel setting */
 	uint8_t output;
 	/**< ASP TX channel setting */
@@ -177,7 +177,6 @@ struct cs35l45_data {
 };
 
 int cs35l45_set_tx_data_source(const struct device *dev, enum cs35l45_data_source data_source, uint32_t tx_idx);
-void cs35l45_dsp_boot_set(const struct device *dev, bool booted);
 
 enum cs35l45_cspl_mboxstate {
 	CSPL_MBOX_STS_RUNNING = 0,
